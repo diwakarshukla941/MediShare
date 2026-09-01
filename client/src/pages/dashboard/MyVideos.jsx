@@ -9,15 +9,18 @@ export default function MyVideos() {
   const [videos, setVideos] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
   const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
+  // Only gates the very first load — background refreshes (pagination,
+  // search, and VideoTable's own status-polling while a video is rendering)
+  // update `videos` in place instead of unmounting the table, so the list
+  // doesn't flash/blink every few seconds while something is processing.
+  const [initialLoading, setInitialLoading] = useState(true);
 
   const load = useCallback(
     async (page = 1) => {
-      setLoading(true);
       const { data } = await api.get("/videos", { params: { page, limit: 10, search } });
       setVideos(data.videos);
       setPagination(data.pagination);
-      setLoading(false);
+      setInitialLoading(false);
     },
     [search]
   );
@@ -26,6 +29,8 @@ export default function MyVideos() {
     const t = setTimeout(() => load(1), 300);
     return () => clearTimeout(t);
   }, [load]);
+
+  const handleChanged = useCallback(() => load(pagination.page), [load, pagination.page]);
 
   return (
     <div>
@@ -54,7 +59,7 @@ export default function MyVideos() {
           </div>
         </div>
 
-        {!loading && <VideoTable videos={videos} onChanged={() => load(pagination.page)} />}
+        {!initialLoading && <VideoTable videos={videos} onChanged={handleChanged} />}
 
         {pagination.pages > 1 && (
           <div className="mt-4 flex items-center justify-center gap-3">

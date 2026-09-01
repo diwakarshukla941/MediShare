@@ -12,17 +12,20 @@ const STORAGE_QUOTA_GB = 20;
 export default function Overview() {
   const [stats, setStats] = useState(null);
   const [recent, setRecent] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // Only gates the very first load — background refreshes (triggered by
+  // VideoTable's own status-polling while a video is rendering) update
+  // state in place instead of unmounting things, so the page doesn't
+  // flash/blink every few seconds while something is processing.
+  const [initialLoading, setInitialLoading] = useState(true);
 
   const load = useCallback(async () => {
-    setLoading(true);
     const [statsRes, videosRes] = await Promise.all([
       api.get("/videos/stats"),
       api.get("/videos", { params: { limit: 5 } }),
     ]);
     setStats(statsRes.data);
     setRecent(videosRes.data.videos);
-    setLoading(false);
+    setInitialLoading(false);
   }, []);
 
   useEffect(() => {
@@ -40,27 +43,27 @@ export default function Overview() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             label="Total Videos"
-            value={loading ? "—" : stats.totalVideos}
+            value={initialLoading ? "—" : stats.totalVideos}
             sub="Uploaded videos"
             icon={Video}
           />
           <StatCard
             label="Total Views"
-            value={loading ? "—" : stats.totalViews.toLocaleString()}
+            value={initialLoading ? "—" : stats.totalViews.toLocaleString()}
             sub="Across all videos"
             icon={Eye}
             iconClass="bg-green-100 text-green-700"
           />
           <StatCard
             label="Total Shares"
-            value={loading ? "—" : stats.totalShares.toLocaleString()}
+            value={initialLoading ? "—" : stats.totalShares.toLocaleString()}
             sub="Links shared"
             icon={Share2}
             iconClass="bg-purple-100 text-purple-700"
           />
           <StatCard
             label="Storage Used"
-            value={loading ? "—" : `${formatBytes(stats.storageUsed)} / ${STORAGE_QUOTA_GB} GB`}
+            value={initialLoading ? "—" : `${formatBytes(stats.storageUsed)} / ${STORAGE_QUOTA_GB} GB`}
             sub={`${storagePctLabel}% used`}
             icon={HardDrive}
             iconClass="bg-amber-100 text-amber-700"
@@ -82,7 +85,7 @@ export default function Overview() {
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-base font-semibold text-slate-900">Recent Videos</h2>
           </div>
-          {!loading && <VideoTable videos={recent} onChanged={load} compact />}
+          {!initialLoading && <VideoTable videos={recent} onChanged={load} compact />}
         </div>
 
         <div className="mt-4 text-center">
