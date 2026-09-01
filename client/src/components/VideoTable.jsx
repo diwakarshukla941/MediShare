@@ -1,0 +1,206 @@
+import { useEffect, useState } from "react";
+import { Copy, Share2, Pencil, Trash2, Eye, Download, Loader2, AlertCircle } from "lucide-react";
+import toast from "react-hot-toast";
+import { api, getErrorMessage } from "../lib/api.js";
+import ConfirmDialog from "./ConfirmDialog.jsx";
+import EditVideoModal from "./EditVideoModal.jsx";
+
+function formatDate(d) {
+  return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+export default function VideoTable({ videos, onChanged, compact = false }) {
+  const [editing, setEditing] = useState(null);
+  const [deleting, setDeleting] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [downloadingId, setDownloadingId] = useState(null);
+
+  const downloadFramed = async (video) => {
+    setDownloadingId(video._id);
+    const toastId = toast.loading("Preparing framed video...");
+    try {
+      const { data } = await api.post(`/videos/${video._id}/download`);
+      toast.success("Download ready", { id: toastId });
+      window.location.href = data.url;
+    } catch (err) {
+      toast.error(getErrorMessage(err), { id: toastId });
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
+  const watchUrl = (slug) => `${window.location.origin}/watch/${slug}`;
+
+  const copyLink = async (video) => {
+    try {
+      await navigator.clipboard.writeText(watchUrl(video.slug));
+    } catch {
+      // ignore — toast still confirms intent, user can copy manually if clipboard blocked
+    }
+    toast.success("Link copied");
+    api.post(`/videos/${video._id}/share`).catch(() => {});
+  };
+
+  const shareLink = async (video) => {
+    const url = watchUrl(video.slug);
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: video.title || video.doctorName, url });
+        api.post(`/videos/${video._id}/share`).catch(() => {});
+        return;
+      } catch {
+        return;
+      }
+    }
+    copyLink(video);
+  };
+
+  useEffect(() => {
+    const hasActive = videos.some((v) => v.renderingStatus === "pending" || v.renderingStatus === "processing");
+    if (!hasActive) return undefined;
+    const t = setInterval(() => onChanged(), 4000);
+    return () => clearInterval(t);
+  }, [videos, onChanged]);
+
+  const confirmDelete = async () => {
+    setBusy(true);
+    try {
+      await api.delete(`/videos/${deleting._id}`);
+      toast.success("Video deleted");
+      setDeleting(null);
+      onChanged();
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (videos.length === 0) {
+    return (
+      <div className="card flex flex-col items-center justify-center px-6 py-16 text-center">
+        <p className="text-sm font-medium text-slate-500">No videos yet</p>
+        <p className="mt-1 text-xs text-slate-400">Upload a video to see it listed here.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <thead className="border-b border-slate-100 bg-slate-50/60 text-xs uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="px-5 py-3 font-medium">Title &amp; Info</th>
+              <th className="px-5 py-3 font-medium">Views</th>
+              {!compact && <th className="px-5 py-3 font-medium">Shares</th>}
+              <th className="px-5 py-3 font-medium">Uploaded On</th>
+              <th className="px-5 py-3 text-right font-medium">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {videos.map((video) => (
+              <tr key={video._id} className="transition hover:bg-slate-50/60">
+                <td className="max-w-xs px-5 py-3.5">
+                  <p className="truncate font-semibold text-slate-900">{video.title || "Untitled video"}</p>
+                  <p className="mt-0.5 truncate text-xs text-slate-500">
+                    {video.doctorName} &middot; {video.degree}
+                  </p>
+                  {(video.renderingStatus === "pending" || video.renderingStatus === "processing") && (
+                    <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-600">
+                      <Loader2 size={10} className="animate-spin" />
+                      Processing{video.renderProgress ? ` ${video.renderProgress}%` : "..."}
+                    </span>
+                  )}
+                  {video.renderingStatus === "failed" && (
+                    <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-medium text-red-600">
+                      <AlertCircle size={10} />
+                      Render failed
+                    </span>
+                  )}
+                </td>
+                <td className="px-5 py-3.5 text-slate-600">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Eye size={14} className="text-slate-400" />
+                    {video.views}
+                  </span>
+                </td>
+                {!compact && <td className="px-5 py-3.5 text-slate-600">{video.shareCount}</td>}
+                <td className="px-5 py-3.5 text-slate-500">{formatDate(video.createdAt)}</td>
+                <td className="px-5 py-3.5">
+                  <div className="flex items-center justify-end gap-1">
+                    <a
+                      href={watchUrl(video.slug)}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Watch"
+                      className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                    >
+                      <Eye size={16} />
+                    </a>
+                    <button
+                      title="Copy link"
+                      onClick={() => copyLink(video)}
+                      className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                    >
+                      <Copy size={16} />
+                    </button>
+                    <button
+                      title="Share"
+                      onClick={() => shareLink(video)}
+                      className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                    >
+                      <Share2 size={16} />
+                    </button>
+                    <button
+                      title="Download with frame"
+                      onClick={() => downloadFramed(video)}
+                      disabled={downloadingId === video._id}
+                      className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+                    >
+                      <Download size={16} />
+                    </button>
+                    <button
+                      title="Edit info"
+                      onClick={() => setEditing(video)}
+                      className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                    >
+                      <Pencil size={16} />
+                    </button>
+                    <button
+                      title="Delete"
+                      onClick={() => setDeleting(video)}
+                      className="rounded-lg p-2 text-red-500 transition hover:bg-red-50"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {editing && (
+        <EditVideoModal
+          video={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            onChanged();
+          }}
+        />
+      )}
+
+      <ConfirmDialog
+        open={Boolean(deleting)}
+        title="Delete this video?"
+        message={`"${deleting?.title || deleting?.doctorName}" will be permanently removed and its link will stop working.`}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleting(null)}
+        loading={busy}
+      />
+    </div>
+  );
+}
