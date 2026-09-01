@@ -1,7 +1,11 @@
 import axios from "axios";
 
+// In dev, Vite proxies "/api" to the local server (see vite.config.js).
+// In production the frontend and backend are separate hosted services on
+// different domains, so VITE_API_BASE_URL must point at the deployed API
+// (e.g. https://medishare-api.onrender.com/api) — set at build time.
 export const api = axios.create({
-  baseURL: "/api",
+  baseURL: import.meta.env.VITE_API_BASE_URL || "/api",
 });
 
 api.interceptors.request.use((config) => {
