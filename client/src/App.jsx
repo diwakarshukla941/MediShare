@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
+import RequirePermission from "./components/RequirePermission.jsx";
 
 import PublicUpload from "./pages/PublicUpload.jsx";
 import WatchVideo from "./pages/WatchVideo.jsx";
@@ -14,8 +15,10 @@ import UploadSingle from "./pages/dashboard/UploadSingle.jsx";
 import BulkUpload from "./pages/dashboard/BulkUpload.jsx";
 import FramesList from "./pages/dashboard/frames/FramesList.jsx";
 import FrameDesigner from "./pages/dashboard/frames/FrameDesigner.jsx";
+import ContentTemplates from "./pages/dashboard/frames/ContentTemplates.jsx";
 import Analytics from "./pages/dashboard/Analytics.jsx";
 import Settings from "./pages/dashboard/Settings.jsx";
+import Team from "./pages/dashboard/Team.jsx";
 
 export default function App() {
   return (
@@ -36,13 +39,56 @@ export default function App() {
           }
         >
           <Route index element={<Overview />} />
-          <Route path="videos" element={<MyVideos />} />
-          <Route path="upload" element={<UploadSingle />} />
-          <Route path="bulk-upload" element={<BulkUpload />} />
-          {/* Unlisted on purpose — not in the sidebar. Bookmark this URL. */}
-          <Route path="frame-studio-1845fd3e26ad" element={<FramesList />} />
-          <Route path="analytics" element={<Analytics />} />
+          <Route
+            path="videos"
+            element={
+              <RequirePermission permission="videos:view">
+                <MyVideos />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="upload"
+            element={
+              <RequirePermission permission="videos:upload">
+                <UploadSingle />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="bulk-upload"
+            element={
+              <RequirePermission permission="videos:bulk_upload">
+                <BulkUpload />
+              </RequirePermission>
+            }
+          />
+          {/* Unlisted URL for non-super-admins; only super_admin grants this permission to anyone */}
+          <Route
+            path="frame-studio-1845fd3e26ad"
+            element={
+              <RequirePermission permission="frames:manage">
+                <FramesList />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="analytics"
+            element={
+              <RequirePermission permission="analytics:view">
+                <Analytics />
+              </RequirePermission>
+            }
+          />
           <Route path="settings" element={<Settings />} />
+          <Route
+            path="team"
+            element={
+              <RequirePermission permission="team:manage">
+                <Team />
+              </RequirePermission>
+            }
+          />
         </Route>
 
         {/* Full-screen editor — deliberately outside DashboardLayout (no app sidebar) */}
@@ -50,7 +96,19 @@ export default function App() {
           path="/dashboard/frame-studio-1845fd3e26ad/new"
           element={
             <ProtectedRoute>
-              <FrameDesigner />
+              <RequirePermission permission="frames:manage">
+                <FrameDesigner />
+              </RequirePermission>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/dashboard/frame-studio-1845fd3e26ad/content-templates"
+          element={
+            <ProtectedRoute>
+              <RequirePermission permission="content_templates:manage">
+                <ContentTemplates />
+              </RequirePermission>
             </ProtectedRoute>
           }
         />
@@ -58,7 +116,9 @@ export default function App() {
           path="/dashboard/frame-studio-1845fd3e26ad/:frameId"
           element={
             <ProtectedRoute>
-              <FrameDesigner />
+              <RequirePermission permission="frames:manage">
+                <FrameDesigner />
+              </RequirePermission>
             </ProtectedRoute>
           }
         />

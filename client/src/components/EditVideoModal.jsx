@@ -8,11 +8,11 @@ export default function EditVideoModal({ video, onClose, onSaved }) {
     doctorName: video.doctorName || "",
     degree: video.degree || "",
     specialization: video.specialization || "",
-    designation: video.designation || "",
     organizationName: video.organizationName || "",
     title: video.title || "",
     description: video.description || "",
     phone: video.phone || "",
+    email: video.email || "",
   });
   const [saving, setSaving] = useState(false);
 
@@ -60,17 +60,20 @@ export default function EditVideoModal({ video, onClose, onSaved }) {
             </div>
             <div>
               <label className="label">Phone</label>
-              <input className="input" value={form.phone} onChange={update("phone")} />
+              <input className="input" value={form.phone} onChange={update("phone")} required />
             </div>
             <div>
-              <label className="label">Designation</label>
-              <input className="input" value={form.designation} onChange={update("designation")} />
+              <label className="label">Email</label>
+              <input className="input" type="email" value={form.email} onChange={update("email")} required />
             </div>
             <div>
               <label className="label">Organization Name</label>
               <input className="input" value={form.organizationName} onChange={update("organizationName")} />
             </div>
           </div>
+          <p className="text-xs text-slate-400">
+            Title/description below override whatever the content templates would otherwise fill in for this video.
+          </p>
           <div>
             <label className="label">Title</label>
             <input className="input" value={form.title} onChange={update("title")} />

@@ -8,19 +8,33 @@ import {
   Settings,
   LogOut,
   X,
+  Wand2,
+  FileText,
+  Users,
 } from "lucide-react";
 import Logo from "../Logo.jsx";
 import { useAuth } from "../../context/AuthContext.jsx";
+import { hasPermission } from "../../lib/accessPermissions.js";
 
-// Frames is intentionally not listed here — it lives at an unlisted URL.
-// See client/src/App.jsx for the route.
+const FRAME_STUDIO_BASE = "/dashboard/frame-studio-1845fd3e26ad";
+
+// Each entry shows only if the logged-in account holds that permission
+// (super_admin always holds everything). `permission: null` means always shown.
 const links = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, end: true },
-  { to: "/dashboard/videos", label: "My Videos", icon: Video },
-  { to: "/dashboard/upload", label: "Upload Video", icon: UploadCloud },
-  { to: "/dashboard/bulk-upload", label: "Bulk Upload", icon: Layers },
-  { to: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
-  { to: "/dashboard/settings", label: "Settings", icon: Settings },
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, end: true, permission: null },
+  { to: "/dashboard/videos", label: "My Videos", icon: Video, permission: "videos:view" },
+  { to: "/dashboard/upload", label: "Upload Video", icon: UploadCloud, permission: "videos:upload" },
+  { to: "/dashboard/bulk-upload", label: "Bulk Upload", icon: Layers, permission: "videos:bulk_upload" },
+  { to: "/dashboard/analytics", label: "Analytics", icon: BarChart3, permission: "analytics:view" },
+  { to: FRAME_STUDIO_BASE, label: "Frame Studio", icon: Wand2, permission: "frames:manage" },
+  {
+    to: `${FRAME_STUDIO_BASE}/content-templates`,
+    label: "Content Templates",
+    icon: FileText,
+    permission: "content_templates:manage",
+  },
+  { to: "/dashboard/settings", label: "Settings", icon: Settings, permission: null },
+  { to: "/dashboard/team", label: "Team & Access", icon: Users, permission: "team:manage" },
 ];
 
 const ENV_BADGE = {
@@ -31,9 +45,10 @@ const ENV_BADGE = {
 // Static & visible on desktop (md+); a slide-in overlay drawer on mobile,
 // controlled by `open`/`onClose` from DashboardLayout's hamburger button.
 export default function Sidebar({ open, onClose }) {
-  const { logout } = useAuth();
+  const { logout, admin } = useAuth();
   const appEnv = import.meta.env.VITE_APP_ENV || "development";
   const badge = ENV_BADGE[appEnv];
+  const navLinks = links.filter((l) => !l.permission || hasPermission(admin, l.permission));
 
   return (
     <>
@@ -59,7 +74,7 @@ export default function Sidebar({ open, onClose }) {
         </div>
 
         <nav className="mt-8 flex-1 space-y-1 overflow-y-auto">
-          {links.map(({ to, label, icon: Icon, end }) => (
+          {navLinks.map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}
               to={to}

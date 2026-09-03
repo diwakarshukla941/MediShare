@@ -7,6 +7,9 @@ import authRoutes from "./routes/auth.routes.js";
 import videoRoutes from "./routes/video.routes.js";
 import analyticsRoutes from "./routes/analytics.routes.js";
 import frameRoutes from "./routes/frame.routes.js";
+import contentTemplateRoutes from "./routes/contentTemplate.routes.js";
+import adminUserRoutes from "./routes/adminUser.routes.js";
+import roleRoutes from "./routes/role.routes.js";
 import { notFoundHandler, errorHandler } from "./middleware/error.middleware.js";
 
 export function createApp() {
@@ -31,6 +34,9 @@ export function createApp() {
   app.use("/api/videos", videoRoutes);
   app.use("/api/analytics", analyticsRoutes);
   app.use("/api/frames", frameRoutes);
+  app.use("/api/content-templates", contentTemplateRoutes);
+  app.use("/api/admins", adminUserRoutes);
+  app.use("/api/roles", roleRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

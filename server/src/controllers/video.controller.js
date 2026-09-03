@@ -1,4 +1,4 @@
-import { parse } from "csv-parse/sync";
+import { parseSheetFile } from "../utils/parseSheetFile.js";
 import { Video } from "../models/Video.js";
 import { AnalyticsEvent } from "../models/AnalyticsEvent.js";
 import { ApiError } from "../utils/ApiError.js";
@@ -9,6 +9,7 @@ import { detectDevice } from "../utils/detectDevice.js";
 import { getActiveFrame } from "../models/Frame.js";
 import { frameVersion } from "../utils/composeFramedVideo.js";
 import { enqueueRender } from "../utils/renderQueue.js";
+import { resolveContentTemplate } from "../utils/resolveContentTemplate.js";
 
 export const createVideo = asyncHandler(async (req, res) => {
   if (!req.file) {
@@ -16,16 +17,24 @@ export const createVideo = asyncHandler(async (req, res) => {
   }
 
   const meta = videoMetaSchema.parse(req.body);
-  const uploaded = await uploadVideoToImageKit(req.file);
+  const [uploaded, content] = await Promise.all([
+    uploadVideoToImageKit(req.file),
+    resolveContentTemplate(meta.email),
+  ]);
 
   const video = await Video.create({
     ...meta,
+    ...content,
     videoUrl: uploaded.url,
     thumbnailUrl: uploaded.thumbnailUrl,
     imagekitFileId: uploaded.fileId,
     fileName: uploaded.name,
     fileSize: uploaded.size,
     source: req.admin ? "dashboard" : "public",
+    uploadedBy: req.admin?._id || null,
+    uploadedByName: req.admin?.name || "",
+    uploadedByEmail: req.admin?.email || "",
+    uploadedByLocation: req.admin?.location || "",
   });
 
   enqueueRender(video._id).catch(() => {});
@@ -39,33 +48,31 @@ export const createVideo = asyncHandler(async (req, res) => {
 
 export const bulkCreateVideos = asyncHandler(async (req, res) => {
   const videoFiles = req.files?.videos || [];
-  const csvFile = req.files?.csv?.[0];
+  const sheetFile = req.files?.sheet?.[0];
 
   if (videoFiles.length === 0) {
     throw new ApiError(400, "At least one video file is required");
   }
-  if (!csvFile) {
-    throw new ApiError(400, "A CSV file with video metadata is required for bulk upload");
+  if (!sheetFile) {
+    throw new ApiError(400, "A CSV or Excel file with video metadata is required for bulk upload");
   }
 
   let rows;
   try {
-    rows = parse(csvFile.buffer.toString("utf-8"), {
-      columns: (header) => header.map((h) => h.trim().toLowerCase()),
-      skip_empty_lines: true,
-      trim: true,
-    });
+    rows = parseSheetFile(sheetFile);
   } catch {
-    throw new ApiError(400, "Could not parse the CSV file. Please use the sample template.");
+    throw new ApiError(400, "Could not parse the metadata file. Please use the sample template.");
   }
 
-  const rowsByFileName = new Map(rows.map((row) => [row.filename?.trim(), row]));
+  const rowsByFileName = new Map(
+    rows.map((row) => [String(row.filename || "").trim().toLowerCase(), row])
+  );
 
   const created = [];
   const errors = [];
 
   for (const file of videoFiles) {
-    const row = rowsByFileName.get(file.originalname);
+    const row = rowsByFileName.get(file.originalname.trim().toLowerCase());
     if (!row) {
       errors.push({ fileName: file.originalname, error: "No matching row in CSV (check the fileName column)" });
       continue;
@@ -75,11 +82,9 @@ export const bulkCreateVideos = asyncHandler(async (req, res) => {
       doctorName: row.doctorname,
       degree: row.degree,
       specialization: row.specialization,
-      designation: row.designation,
       organizationName: row.organizationname,
-      title: row.title,
-      description: row.description,
       phone: row.phone,
+      email: row.email,
     });
 
     if (!parsedMeta.success) {
@@ -91,15 +96,23 @@ export const bulkCreateVideos = asyncHandler(async (req, res) => {
     }
 
     try {
-      const uploaded = await uploadVideoToImageKit(file);
+      const [uploaded, content] = await Promise.all([
+        uploadVideoToImageKit(file),
+        resolveContentTemplate(parsedMeta.data.email),
+      ]);
       const video = await Video.create({
         ...parsedMeta.data,
+        ...content,
         videoUrl: uploaded.url,
         thumbnailUrl: uploaded.thumbnailUrl,
         imagekitFileId: uploaded.fileId,
         fileName: uploaded.name,
         fileSize: uploaded.size,
         source: "bulk",
+        uploadedBy: req.admin._id,
+        uploadedByName: req.admin.name,
+        uploadedByEmail: req.admin.email,
+        uploadedByLocation: req.admin.location || "",
       });
       enqueueRender(video._id).catch(() => {});
       created.push(video);
@@ -113,8 +126,8 @@ export const bulkCreateVideos = asyncHandler(async (req, res) => {
 
 export const getSampleCsv = asyncHandler(async (req, res) => {
   const csv = [
-    "fileName,doctorName,degree,specialization,designation,title,description,phone,organizationName",
-    "sleep-tips.mp4,Dr. Diwakar Shukla,MBBS,General Physician,Senior Consultant,Health Tips for Good Sleep,Simple tips for better sleep,+91 12345 67890,MediCare Clinic",
+    "fileName,doctorName,degree,specialization,phone,email,organizationName",
+    "sleep-tips.mp4,Dr. Diwakar Shukla,MBBS,General Physician,+91 12345 67890,diwakar@medicare.example,MediCare Clinic",
   ].join("\n");
 
   res.setHeader("Content-Type", "text/csv");
@@ -134,10 +147,8 @@ export const listVideos = asyncHandler(async (req, res) => {
     ? {
         $or: [
           { doctorName: { $regex: searchPattern, $options: "i" } },
-          { title: { $regex: searchPattern, $options: "i" } },
-          { specialization: { $regex: searchPattern, $options: "i" } },
-          { degree: { $regex: searchPattern, $options: "i" } },
           { phone: { $regex: searchPattern, $options: "i" } },
+          { email: { $regex: searchPattern, $options: "i" } },
         ],
       }
     : {};

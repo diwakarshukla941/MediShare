@@ -46,6 +46,9 @@ export default function Settings() {
             <p>
               <span className="text-slate-400">Email:</span> {admin?.email}
             </p>
+            <p>
+              <span className="text-slate-400">Location:</span> {admin?.location || "—"}
+            </p>
           </div>
         </div>
 
