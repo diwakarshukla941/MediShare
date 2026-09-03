@@ -6,7 +6,7 @@ import ffmpegPath from "ffmpeg-static";
 import ffmpeg from "fluent-ffmpeg";
 import axios from "axios";
 import { buildFrameOverlaySvg } from "./renderFrameSvg.js";
-import { getImageKit } from "../config/imagekit.js";
+import { getImageKit, imagekitFolder } from "../config/imagekit.js";
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 
@@ -121,7 +121,7 @@ export async function composeFramedVideo(video, frame, { onProgress } = {}) {
     const uploaded = await imagekit.upload({
       file: outputBuffer,
       fileName: `${video.slug}-framed.mp4`,
-      folder: "/medishare/rendered",
+      folder: imagekitFolder("rendered"),
       useUniqueFileName: true,
     });
 

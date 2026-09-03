@@ -22,13 +22,25 @@ const links = [
   { to: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
+const ENV_BADGE = {
+  staging: { label: "STAGING", className: "bg-amber-400 text-amber-950" },
+  development: { label: "DEV", className: "bg-slate-500 text-white" },
+};
+
 export default function Sidebar() {
   const { logout } = useAuth();
+  const appEnv = import.meta.env.VITE_APP_ENV || "development";
+  const badge = ENV_BADGE[appEnv];
 
   return (
     <aside className="flex h-full w-64 shrink-0 flex-col bg-navy-800 px-4 py-6">
-      <div className="px-2">
+      <div className="flex items-center justify-between px-2">
         <Logo dark />
+        {badge && (
+          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide ${badge.className}`}>
+            {badge.label}
+          </span>
+        )}
       </div>
 
       <nav className="mt-8 flex-1 space-y-1 overflow-y-auto">

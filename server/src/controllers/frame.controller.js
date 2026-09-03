@@ -3,7 +3,7 @@ import { Video } from "../models/Video.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { frameCreateSchema, frameUpdateSchema } from "../validators/frame.validator.js";
-import { getImageKit } from "../config/imagekit.js";
+import { getImageKit, imagekitFolder } from "../config/imagekit.js";
 import { deleteFromImageKit } from "../utils/uploadToImageKit.js";
 import { enqueueRenderForAllVideos } from "../utils/renderQueue.js";
 import { AVAILABLE_VARIABLES } from "../utils/resolveVariables.js";
@@ -107,7 +107,7 @@ export const uploadFrameAsset = asyncHandler(async (req, res) => {
   const uploaded = await imagekit.upload({
     file: req.file.buffer,
     fileName: req.file.originalname,
-    folder: "/medishare/frame-assets",
+    folder: imagekitFolder("frame-assets"),
     useUniqueFileName: true,
   });
 

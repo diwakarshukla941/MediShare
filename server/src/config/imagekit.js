@@ -21,3 +21,12 @@ export function getImageKit() {
 
   return client;
 }
+
+// Keeps environments' uploads physically separate in the same ImageKit
+// account (e.g. "/medishare-staging/videos" vs "/medishare/videos") so
+// staging test uploads never mix with production files. Defaults to
+// "/medishare" when unset, matching the original single-environment setup.
+export function imagekitFolder(subfolder) {
+  const prefix = (process.env.IMAGEKIT_FOLDER_PREFIX || "/medishare").replace(/\/+$/, "");
+  return `${prefix}/${subfolder}`;
+}

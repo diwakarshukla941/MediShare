@@ -13,6 +13,7 @@ A MERN app for doctors/clinics to upload patient-education videos and get a shar
 - [How video rendering works](#how-video-rendering-works)
 - [Bulk upload CSV format](#bulk-upload-csv-format)
 - [API reference](#api-reference)
+- [Environments (dev / staging / production)](#environments-dev--staging--production)
 - [Deployment notes](#deployment-notes)
 
 ---
@@ -153,6 +154,34 @@ All routes are mounted under `/api`. Base URLs: `/api/auth`, `/api/videos`, `/ap
 - `GET /analytics?range=7|30|90`
 - `GET/POST/PATCH/DELETE /frames`, `/frames/:id`, `/frames/:id/duplicate`, `/frames/:id/activate`, `/frames/assets` (image upload for the Designer)
 - `GET /auth/me`, `POST /auth/change-password`
+
+## Environments (dev / staging / production)
+
+Three environments, same repo, kept fully separate at the data layer so nothing accidental crosses over:
+
+| | Development | Staging | Production |
+|---|---|---|---|
+| Where | Your local machine (`npm run dev`) | Render, deployed from the `staging` branch | Render, deployed from the `main` branch |
+| Purpose | Free experimentation | Safe testing of real changes before they go live | The real, stable app |
+| MongoDB | Local `.env`, its own database name (e.g. `medishare_dev`) | Its own database name (e.g. `medishare_staging`) | Its own database name (e.g. `medishare_production`) |
+| ImageKit | Same account, `IMAGEKIT_FOLDER_PREFIX=/medishare-dev` (or leave default) | Same account, `IMAGEKIT_FOLDER_PREFIX=/medishare-staging` | Same account, `IMAGEKIT_FOLDER_PREFIX=/medishare` |
+| Client badge | — | Amber "STAGING" badge in the dashboard sidebar | No badge |
+
+All three use the **same MongoDB Atlas cluster and the same ImageKit account** — only the database name and folder prefix differ per environment (both are just env var values, no separate accounts needed). `render.yaml` declares all four Render services (`medishare-api`/`medishare-client` on `main`, `medishare-api-staging`/`medishare-client-staging` on `staging`) in one blueprint.
+
+**Branches — three, not two — and every promotion goes through a pull request, never a direct push:**
+```
+develop  →  (PR)  →  staging  →  (PR)  →  main
+(work here)          (deploys to        (deploys to
+                       staging)           production)
+```
+- `develop` — where day-to-day work happens. Never deployed anywhere directly.
+- `staging` — only updated via a PR from `develop`. Auto-deploys to the two `-staging` Render services on merge.
+- `main` — only updated via a PR from `staging`, once staging's been verified. Auto-deploys to production on merge.
+
+Set this up as a hard rule, not just a habit: in the GitHub repo, go to **Settings → Branches → Add branch ruleset** (or "Add rule" on older GitHub UIs) for both `staging` and `main`, and require a pull request before merging (optionally require it to come from a specific branch, and disable direct pushes for repo admins too if you want it fully enforced). Without that setting, GitHub still allows a direct push to either branch — the workflow above is a convention until the ruleset is in place.
+
+**Verifying which environment you're hitting:** `GET /api/health` on any deployed API echoes back `{ "environment": "staging" | "production" | "development" }` (set via the `APP_ENV` env var). The dashboard sidebar also shows a "STAGING"/"DEV" badge next to the logo whenever `VITE_APP_ENV` isn't `production`.
 
 ## Deployment notes
 

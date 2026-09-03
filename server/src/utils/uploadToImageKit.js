@@ -1,4 +1,4 @@
-import { getImageKit } from "../config/imagekit.js";
+import { getImageKit, imagekitFolder } from "../config/imagekit.js";
 
 export async function uploadVideoToImageKit(file) {
   const imagekit = getImageKit();
@@ -6,7 +6,7 @@ export async function uploadVideoToImageKit(file) {
   const result = await imagekit.upload({
     file: file.buffer,
     fileName: file.originalname,
-    folder: "/medishare/videos",
+    folder: imagekitFolder("videos"),
     useUniqueFileName: true,
   });
 

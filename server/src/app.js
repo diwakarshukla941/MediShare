@@ -26,7 +26,7 @@ export function createApp() {
     app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
   }
 
-  app.get("/api/health", (req, res) => res.json({ status: "ok" }));
+  app.get("/api/health", (req, res) => res.json({ status: "ok", environment: process.env.APP_ENV || "development" }));
   app.use("/api/auth", authRoutes);
   app.use("/api/videos", videoRoutes);
   app.use("/api/analytics", analyticsRoutes);
