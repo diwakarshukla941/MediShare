@@ -55,7 +55,7 @@ export default function UploadSingle() {
     <div>
       <Topbar title="Upload Video (Single)" subtitle="Add a new video with doctor details." />
 
-      <div className="px-8 py-6">
+      <div className="px-4 py-6 sm:px-8">
         <form onSubmit={submit} className="card max-w-2xl space-y-5 p-6">
           <VideoDropzone file={file} onChange={setFile} maxSizeMB={500} />
 

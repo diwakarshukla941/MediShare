@@ -36,7 +36,7 @@ export default function MyVideos() {
     <div>
       <Topbar title="My Videos" subtitle={`${pagination.total} video${pagination.total === 1 ? "" : "s"} in your library`} />
 
-      <div className="px-8 py-6">
+      <div className="px-4 py-6 sm:px-8">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex gap-2">
             <Link to="/dashboard/upload" className="btn-primary">
@@ -48,11 +48,11 @@ export default function MyVideos() {
               Bulk Upload
             </Link>
           </div>
-          <div className="relative w-full max-w-xs">
+          <div className="relative w-full sm:max-w-xs">
             <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               className="input pl-9"
-              placeholder="Search videos..."
+              placeholder="Search by doctor, title, or phone..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />

@@ -36,7 +36,7 @@ export default function Settings() {
     <div>
       <Topbar title="Settings" subtitle="Manage your account." />
 
-      <div className="px-8 py-6">
+      <div className="px-4 py-6 sm:px-8">
         <div className="card max-w-lg p-6">
           <h2 className="text-sm font-semibold text-slate-900">Account</h2>
           <div className="mt-3 space-y-1 text-sm text-slate-600">
