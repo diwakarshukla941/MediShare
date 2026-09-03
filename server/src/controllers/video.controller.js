@@ -126,14 +126,18 @@ export const listVideos = asyncHandler(async (req, res) => {
   const page = Math.max(parseInt(req.query.page) || 1, 1);
   const limit = Math.min(Math.max(parseInt(req.query.limit) || 10, 1), 100);
   const search = (req.query.search || "").trim();
+  // Phone numbers often contain "+", which is invalid at the start of a regex
+  // (PCRE throws "nothing to repeat") — escape special chars before matching.
+  const searchPattern = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
   const filter = search
     ? {
         $or: [
-          { doctorName: { $regex: search, $options: "i" } },
-          { title: { $regex: search, $options: "i" } },
-          { specialization: { $regex: search, $options: "i" } },
-          { degree: { $regex: search, $options: "i" } },
+          { doctorName: { $regex: searchPattern, $options: "i" } },
+          { title: { $regex: searchPattern, $options: "i" } },
+          { specialization: { $regex: searchPattern, $options: "i" } },
+          { degree: { $regex: searchPattern, $options: "i" } },
+          { phone: { $regex: searchPattern, $options: "i" } },
         ],
       }
     : {};

@@ -75,7 +75,7 @@ export default function FramesList() {
     <div>
       <Topbar title="Frames" subtitle="Design and manage the branded frame applied to your videos." />
 
-      <div className="px-8 py-6">
+      <div className="px-4 py-6 sm:px-8">
         <div className="mb-5 flex justify-end">
           <Link to={`${FRAME_STUDIO_BASE}/new`} className="btn-primary">
             <Plus size={16} />

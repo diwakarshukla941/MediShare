@@ -39,7 +39,7 @@ export default function Overview() {
     <div>
       <Topbar title="Dashboard" subtitle="Overview of your video content and performance." />
 
-      <div className="px-8 py-6">
+      <div className="px-4 py-6 sm:px-8">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             label="Total Videos"

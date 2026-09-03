@@ -123,7 +123,7 @@ export default function Analytics() {
     <div>
       <Topbar title="Analytics" subtitle="Track your video performance and audience engagement." />
 
-      <div className="px-8 py-6">
+      <div className="px-4 py-6 sm:px-8">
         <div className="mb-5 flex justify-end">
           <div className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
             {RANGE_OPTIONS.map((o) => (

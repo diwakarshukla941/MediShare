@@ -62,7 +62,7 @@ export default function BulkUpload() {
     <div>
       <Topbar title="Bulk Upload" subtitle="Upload multiple videos at once using a CSV template." />
 
-      <div className="px-8 py-6">
+      <div className="px-4 py-6 sm:px-8">
         <form onSubmit={submit} className="card max-w-2xl space-y-6 p-6">
           <div>
             <label className="label">Upload Multiple Videos</label>
