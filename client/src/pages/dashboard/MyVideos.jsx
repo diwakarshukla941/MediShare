@@ -5,10 +5,13 @@ import Topbar from "../../components/dashboard/Topbar.jsx";
 import VideoTable from "../../components/VideoTable.jsx";
 import { api } from "../../lib/api.js";
 
+const PAGE_SIZE_OPTIONS = [5, 10, 25, 50, 100];
+
 export default function MyVideos() {
   const [videos, setVideos] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
   const [search, setSearch] = useState("");
+  const [pageSize, setPageSize] = useState(10);
   // Only gates the very first load — background refreshes (pagination,
   // search, and VideoTable's own status-polling while a video is rendering)
   // update `videos` in place instead of unmounting the table, so the list
@@ -17,12 +20,12 @@ export default function MyVideos() {
 
   const load = useCallback(
     async (page = 1) => {
-      const { data } = await api.get("/videos", { params: { page, limit: 10, search } });
+      const { data } = await api.get("/videos", { params: { page, limit: pageSize, search } });
       setVideos(data.videos);
       setPagination(data.pagination);
       setInitialLoading(false);
     },
-    [search]
+    [search, pageSize]
   );
 
   useEffect(() => {
@@ -52,7 +55,7 @@ export default function MyVideos() {
             <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               className="input pl-9"
-              placeholder="Search by doctor, title, or phone..."
+              placeholder="Search by name, phone, or email..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -61,25 +64,44 @@ export default function MyVideos() {
 
         {!initialLoading && <VideoTable videos={videos} onChanged={handleChanged} />}
 
-        {pagination.pages > 1 && (
-          <div className="mt-4 flex items-center justify-center gap-3">
-            <button
-              className="btn-secondary !px-3"
-              disabled={pagination.page <= 1}
-              onClick={() => load(pagination.page - 1)}
-            >
-              <ChevronLeft size={16} />
-            </button>
-            <span className="text-sm text-slate-500">
-              Page {pagination.page} of {pagination.pages}
-            </span>
-            <button
-              className="btn-secondary !px-3"
-              disabled={pagination.page >= pagination.pages}
-              onClick={() => load(pagination.page + 1)}
-            >
-              <ChevronRight size={16} />
-            </button>
+        {!initialLoading && pagination.total > 0 && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <label className="flex items-center gap-2 text-sm text-slate-500">
+              Rows per page
+              <select
+                className="input !w-auto !py-1.5 pr-8"
+                value={pageSize}
+                onChange={(e) => setPageSize(Number(e.target.value))}
+              >
+                {PAGE_SIZE_OPTIONS.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {pagination.pages > 1 && (
+              <div className="flex items-center gap-3">
+                <button
+                  className="btn-secondary !px-3"
+                  disabled={pagination.page <= 1}
+                  onClick={() => load(pagination.page - 1)}
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <span className="text-sm text-slate-500">
+                  Page {pagination.page} of {pagination.pages}
+                </span>
+                <button
+                  className="btn-secondary !px-3"
+                  disabled={pagination.page >= pagination.pages}
+                  onClick={() => load(pagination.page + 1)}
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

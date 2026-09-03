@@ -1,16 +1,52 @@
-import { useState } from "react";
-import { Download, FileSpreadsheet, AlertCircle, CheckCircle2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Download, FileSpreadsheet, FolderOpen, AlertCircle, CheckCircle2, Video } from "lucide-react";
 import toast from "react-hot-toast";
 import Topbar from "../../components/dashboard/Topbar.jsx";
-import VideoDropzone from "../../components/VideoDropzone.jsx";
 import { api, getErrorMessage } from "../../lib/api.js";
+import { parseSheetFile, isVideoFile } from "../../lib/parseSheet.js";
 
 export default function BulkUpload() {
-  const [files, setFiles] = useState([]);
-  const [csv, setCsv] = useState(null);
+  const [folderFiles, setFolderFiles] = useState([]);
+  const [sheetFile, setSheetFile] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [parsing, setParsing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState(null);
+
+  useEffect(() => {
+    if (!sheetFile || folderFiles.length === 0) {
+      setPreview(null);
+      return;
+    }
+    let cancelled = false;
+    setParsing(true);
+    parseSheetFile(sheetFile)
+      .then((rows) => {
+        if (cancelled) return;
+        const filesByName = new Map(folderFiles.map((f) => [f.name.trim().toLowerCase(), f]));
+        const matched = [];
+        const unmatchedRows = [];
+        for (const row of rows) {
+          const key = String(row.filename || "").trim().toLowerCase();
+          const file = key && filesByName.get(key);
+          if (file) matched.push({ row, file });
+          else unmatchedRows.push(row);
+        }
+        const matchedNames = new Set(matched.map((m) => m.file.name.trim().toLowerCase()));
+        const unmatchedFiles = folderFiles.filter((f) => !matchedNames.has(f.name.trim().toLowerCase()));
+        setPreview({ matched, unmatchedRows, unmatchedFiles, totalRows: rows.length });
+      })
+      .catch(() => {
+        if (!cancelled) toast.error("Could not read that file — please check it's a valid CSV or Excel file.");
+      })
+      .finally(() => {
+        if (!cancelled) setParsing(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sheetFile, folderFiles]);
 
   const downloadSample = async () => {
     const { data } = await api.get("/videos/sample-csv", { responseType: "blob" });
@@ -22,20 +58,23 @@ export default function BulkUpload() {
     URL.revokeObjectURL(url);
   };
 
+  const onFolderChange = (e) => {
+    const files = Array.from(e.target.files || []).filter(isVideoFile);
+    setFolderFiles(files);
+    setResult(null);
+    if (files.length === 0) toast.error("No video files (MP4, MOV, AVI, WEBM) found in that folder");
+  };
+
   const submit = async (e) => {
     e.preventDefault();
-    if (files.length === 0) {
-      toast.error("Add at least one video file");
-      return;
-    }
-    if (!csv) {
-      toast.error("Upload a CSV with video details (filename must match your video files)");
+    if (!preview || preview.matched.length === 0) {
+      toast.error("No video files matched a row in your CSV/Excel file yet");
       return;
     }
 
     const data = new FormData();
-    files.forEach((f) => data.append("videos", f));
-    data.append("csv", csv);
+    preview.matched.forEach(({ file }) => data.append("videos", file));
+    data.append("sheet", sheetFile);
 
     setUploading(true);
     setProgress(0);
@@ -48,8 +87,9 @@ export default function BulkUpload() {
       if (res.createdCount > 0) toast.success(`${res.createdCount} video(s) uploaded successfully`);
       if (res.errorCount > 0) toast.error(`${res.errorCount} row(s) failed`);
       if (res.createdCount > 0) {
-        setFiles([]);
-        setCsv(null);
+        setFolderFiles([]);
+        setSheetFile(null);
+        setPreview(null);
       }
     } catch (err) {
       toast.error(getErrorMessage(err));
@@ -60,21 +100,43 @@ export default function BulkUpload() {
 
   return (
     <div>
-      <Topbar title="Bulk Upload" subtitle="Upload multiple videos at once using a CSV template." />
+      <Topbar
+        title="Bulk Upload"
+        subtitle="Pick a folder of videos and a CSV/Excel sheet — matched by file name."
+      />
 
       <div className="px-4 py-6 sm:px-8">
         <form onSubmit={submit} className="card max-w-2xl space-y-6 p-6">
           <div>
-            <label className="label">Upload Multiple Videos</label>
-            <VideoDropzone file={files} onChange={setFiles} multiple maxSizeMB={500} />
+            <label className="label">1. Select Videos Folder</label>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs text-slate-500">
+                Pick the folder containing all your video files. We'll automatically match each one to a row in
+                your sheet by file name — no need to select files one by one.
+              </p>
+              <div className="mt-3">
+                <label className="btn-secondary inline-flex cursor-pointer">
+                  <FolderOpen size={15} />
+                  {folderFiles.length > 0 ? `${folderFiles.length} video(s) found` : "Select Folder"}
+                  <input
+                    type="file"
+                    webkitdirectory=""
+                    directory=""
+                    multiple
+                    className="hidden"
+                    onChange={onFolderChange}
+                  />
+                </label>
+              </div>
+            </div>
           </div>
 
           <div>
-            <label className="label">Upload via CSV</label>
+            <label className="label">2. Upload via CSV or Excel</label>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs text-slate-500">
-                Add video details in a CSV file. The <code className="rounded bg-slate-200 px-1">fileName</code>{" "}
-                column must exactly match each uploaded video's file name.
+                Add video details in a CSV or Excel file. The <code className="rounded bg-slate-200 px-1">fileName</code>{" "}
+                column must exactly match each video's file name in the folder above.
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 <button type="button" onClick={downloadSample} className="btn-secondary">
@@ -83,28 +145,57 @@ export default function BulkUpload() {
                 </button>
                 <label className="btn-secondary cursor-pointer">
                   <FileSpreadsheet size={15} />
-                  {csv ? csv.name : "Choose CSV File"}
+                  {sheetFile ? sheetFile.name : "Choose CSV/Excel File"}
                   <input
                     type="file"
-                    accept=".csv,text/csv"
+                    accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     className="hidden"
-                    onChange={(e) => setCsv(e.target.files?.[0] || null)}
+                    onChange={(e) => setSheetFile(e.target.files?.[0] || null)}
                   />
                 </label>
               </div>
             </div>
           </div>
 
+          {parsing && <p className="text-xs text-slate-400">Matching videos to your sheet...</p>}
+
+          {preview && !parsing && (
+            <div className="space-y-2 rounded-2xl border border-slate-200 p-4">
+              <div className="flex items-center gap-2 text-sm font-medium text-slate-800">
+                <Video size={15} className="text-brand-600" />
+                {preview.matched.length} of {preview.totalRows} row(s) matched to a video file
+              </div>
+              {preview.unmatchedRows.length > 0 && (
+                <p className="text-xs text-amber-600">
+                  {preview.unmatchedRows.length} row(s) have no matching video in the folder:{" "}
+                  {preview.unmatchedRows.map((r) => r.filename || "(blank fileName)").join(", ")}
+                </p>
+              )}
+              {preview.unmatchedFiles.length > 0 && (
+                <p className="text-xs text-slate-400">
+                  {preview.unmatchedFiles.length} video(s) in the folder have no matching row and will be skipped:{" "}
+                  {preview.unmatchedFiles.map((f) => f.name).join(", ")}
+                </p>
+              )}
+            </div>
+          )}
+
           {uploading && (
             <div>
               <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
                 <div className="h-full bg-brand-600 transition-all" style={{ width: `${progress}%` }} />
               </div>
-              <p className="mt-1.5 text-xs text-slate-500">Uploading {files.length} video(s)... {progress}%</p>
+              <p className="mt-1.5 text-xs text-slate-500">
+                Uploading {preview?.matched.length || 0} video(s)... {progress}%
+              </p>
             </div>
           )}
 
-          <button type="submit" className="btn-primary w-full" disabled={uploading}>
+          <button
+            type="submit"
+            className="btn-primary w-full"
+            disabled={uploading || !preview || preview.matched.length === 0}
+          >
             {uploading ? "Processing..." : "Upload & Process"}
           </button>
         </form>

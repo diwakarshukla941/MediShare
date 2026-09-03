@@ -10,7 +10,7 @@ import {
   activateFrame,
   uploadFrameAsset,
 } from "../controllers/frame.controller.js";
-import { requireAuth } from "../middleware/auth.middleware.js";
+import { requireAuth, requirePermission } from "../middleware/auth.middleware.js";
 import { uploadFrameImage } from "../middleware/upload.middleware.js";
 
 const router = Router();
@@ -19,13 +19,14 @@ const router = Router();
 router.get("/active", getActiveFrameHandler);
 
 // Everything else is the (unlisted-URL) Frame Studio — protected like other admin routes
-router.get("/", requireAuth, listFrames);
-router.post("/", requireAuth, createFrame);
-router.post("/assets", requireAuth, uploadFrameImage, uploadFrameAsset);
-router.get("/:id", requireAuth, getFrame);
-router.patch("/:id", requireAuth, updateFrame);
-router.delete("/:id", requireAuth, deleteFrame);
-router.post("/:id/duplicate", requireAuth, duplicateFrame);
-router.post("/:id/activate", requireAuth, activateFrame);
+router.use(requireAuth, requirePermission("frames:manage"));
+router.get("/", listFrames);
+router.post("/", createFrame);
+router.post("/assets", uploadFrameImage, uploadFrameAsset);
+router.get("/:id", getFrame);
+router.patch("/:id", updateFrame);
+router.delete("/:id", deleteFrame);
+router.post("/:id/duplicate", duplicateFrame);
+router.post("/:id/activate", activateFrame);
 
 export default router;

@@ -22,13 +22,16 @@ export const uploadSingleVideo = multer({
   fileFilter: videoFileFilter,
 }).single("video");
 
+const SHEET_EXTENSIONS = [".csv", ".xlsx", ".xls"];
+
 export const uploadBulk = multer({
   storage,
-  limits: { fileSize: MAX_VIDEO_SIZE, files: 21 },
+  limits: { fileSize: MAX_VIDEO_SIZE, files: 201 },
   fileFilter(req, file, cb) {
-    if (file.fieldname === "csv") {
-      if (file.mimetype !== "text/csv" && !file.originalname.toLowerCase().endsWith(".csv")) {
-        cb(new ApiError(400, "The metadata file must be a .csv file"));
+    if (file.fieldname === "sheet") {
+      const name = file.originalname.toLowerCase();
+      if (!SHEET_EXTENSIONS.some((ext) => name.endsWith(ext))) {
+        cb(new ApiError(400, "The metadata file must be a .csv, .xlsx or .xls file"));
         return;
       }
       cb(null, true);
@@ -37,9 +40,24 @@ export const uploadBulk = multer({
     videoFileFilter(req, file, cb);
   },
 }).fields([
-  { name: "videos", maxCount: 20 },
-  { name: "csv", maxCount: 1 },
+  { name: "videos", maxCount: 200 },
+  { name: "sheet", maxCount: 1 },
 ]);
+
+const MAX_SHEET_SIZE = 5 * 1024 * 1024; // 5MB
+
+export const uploadSheet = multer({
+  storage,
+  limits: { fileSize: MAX_SHEET_SIZE },
+  fileFilter(req, file, cb) {
+    const name = file.originalname.toLowerCase();
+    if (!SHEET_EXTENSIONS.some((ext) => name.endsWith(ext))) {
+      cb(new ApiError(400, "File must be a .csv, .xlsx or .xls file"));
+      return;
+    }
+    cb(null, true);
+  },
+}).single("sheet");
 
 export const uploadFrameImage = multer({
   storage,

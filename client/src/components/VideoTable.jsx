@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Copy, Share2, Pencil, Trash2, Eye, Download, Loader2, AlertCircle } from "lucide-react";
+import { Copy, Share2, Pencil, Trash2, Eye, Download, Loader2, AlertCircle, Phone, Mail } from "lucide-react";
 import toast from "react-hot-toast";
 import { api, getErrorMessage } from "../lib/api.js";
 import ConfirmDialog from "./ConfirmDialog.jsx";
@@ -91,9 +91,10 @@ export default function VideoTable({ videos, onChanged, compact = false }) {
         <table className="w-full text-left text-sm">
           <thead className="border-b border-slate-100 bg-slate-50/60 text-xs uppercase tracking-wide text-slate-500">
             <tr>
-              <th className="px-5 py-3 font-medium">Title &amp; Info</th>
+              <th className="px-5 py-3 font-medium">Doctor &amp; Contact</th>
               <th className="px-5 py-3 font-medium">Views</th>
               {!compact && <th className="px-5 py-3 font-medium">Shares</th>}
+              {!compact && <th className="px-5 py-3 font-medium">Uploaded By</th>}
               <th className="px-5 py-3 font-medium">Uploaded On</th>
               <th className="px-5 py-3 text-right font-medium">Actions</th>
             </tr>
@@ -102,9 +103,20 @@ export default function VideoTable({ videos, onChanged, compact = false }) {
             {videos.map((video) => (
               <tr key={video._id} className="transition hover:bg-slate-50/60">
                 <td className="max-w-xs px-5 py-3.5">
-                  <p className="truncate font-semibold text-slate-900">{video.title || "Untitled video"}</p>
+                  <p className="truncate font-semibold text-slate-900">{video.doctorName}</p>
                   <p className="mt-0.5 truncate text-xs text-slate-500">
-                    {video.doctorName} &middot; {video.degree}
+                    {video.degree}
+                    {video.specialization ? ` · ${video.specialization}` : ""}
+                  </p>
+                  <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500">
+                    <span className="inline-flex items-center gap-1">
+                      <Phone size={11} className="text-slate-400" />
+                      {video.phone}
+                    </span>
+                    <span className="inline-flex items-center gap-1 truncate">
+                      <Mail size={11} className="text-slate-400" />
+                      {video.email}
+                    </span>
                   </p>
                   {(video.renderingStatus === "pending" || video.renderingStatus === "processing") && (
                     <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-600">
@@ -126,6 +138,23 @@ export default function VideoTable({ videos, onChanged, compact = false }) {
                   </span>
                 </td>
                 {!compact && <td className="px-5 py-3.5 text-slate-600">{video.shareCount}</td>}
+                {!compact && (
+                  <td className="max-w-[10rem] px-5 py-3.5">
+                    {video.uploadedByName ? (
+                      <>
+                        <p className="truncate text-xs font-medium text-slate-700">{video.uploadedByName}</p>
+                        <p className="truncate text-xs text-slate-400">{video.uploadedByEmail}</p>
+                        {video.uploadedByLocation && (
+                          <p className="truncate text-xs text-slate-400">{video.uploadedByLocation}</p>
+                        )}
+                      </>
+                    ) : (
+                      <span className="text-xs text-slate-400">
+                        {video.source === "public" ? "Public link" : "—"}
+                      </span>
+                    )}
+                  </td>
+                )}
                 <td className="px-5 py-3.5 text-slate-500">{formatDate(video.createdAt)}</td>
                 <td className="px-5 py-3.5">
                   <div className="flex items-center justify-end gap-1">
@@ -196,7 +225,7 @@ export default function VideoTable({ videos, onChanged, compact = false }) {
       <ConfirmDialog
         open={Boolean(deleting)}
         title="Delete this video?"
-        message={`"${deleting?.title || deleting?.doctorName}" will be permanently removed and its link will stop working.`}
+        message={`"${deleting?.doctorName}" will be permanently removed and its link will stop working.`}
         onConfirm={confirmDelete}
         onCancel={() => setDeleting(null)}
         loading={busy}

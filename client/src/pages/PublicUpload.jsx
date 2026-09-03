@@ -7,7 +7,14 @@ import VideoDropzone from "../components/VideoDropzone.jsx";
 import CopyLinkField from "../components/CopyLinkField.jsx";
 import { api, getErrorMessage } from "../lib/api.js";
 
-const initialForm = { doctorName: "", degree: "", specialization: "", title: "" };
+const initialForm = {
+  doctorName: "",
+  degree: "",
+  specialization: "",
+  organizationName: "",
+  phone: "",
+  email: "",
+};
 
 export default function PublicUpload() {
   const [file, setFile] = useState(null);
@@ -130,12 +137,34 @@ export default function PublicUpload() {
               />
             </div>
             <div>
-              <label className="label">Title (Optional)</label>
+              <label className="label">Phone Number</label>
               <input
                 className="input"
-                placeholder="e.g. Diabetes Care Tips"
-                value={form.title}
-                onChange={update("title")}
+                type="tel"
+                required
+                placeholder="e.g. +91 12345 67890"
+                value={form.phone}
+                onChange={update("phone")}
+              />
+            </div>
+            <div>
+              <label className="label">Email</label>
+              <input
+                className="input"
+                type="email"
+                required
+                placeholder="e.g. doctor@clinic.com"
+                value={form.email}
+                onChange={update("email")}
+              />
+            </div>
+            <div>
+              <label className="label">Organization Name (Optional)</label>
+              <input
+                className="input"
+                placeholder="e.g. MediCare Clinic"
+                value={form.organizationName}
+                onChange={update("organizationName")}
               />
             </div>
           </div>

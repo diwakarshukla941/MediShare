@@ -18,7 +18,7 @@ export default function Topbar({ title, subtitle }) {
           </span>
           <div className="hidden text-left sm:block">
             <p className="text-sm font-semibold leading-tight text-slate-900">{admin?.name}</p>
-            <p className="text-xs text-slate-500">Admin</p>
+            <p className="text-xs text-slate-500">{admin?.role === "super_admin" ? "Super Admin" : "Admin"}</p>
           </div>
         </div>
       </div>
