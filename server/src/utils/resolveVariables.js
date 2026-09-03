@@ -2,10 +2,11 @@ export const AVAILABLE_VARIABLES = [
   { key: "doctorName", label: "Doctor Name" },
   { key: "degree", label: "Degree" },
   { key: "specialization", label: "Specialization" },
-  { key: "designation", label: "Designation" },
   { key: "title", label: "Video Title" },
   { key: "description", label: "Description" },
   { key: "organizationName", label: "Organization Name" },
+  { key: "phone", label: "Phone" },
+  { key: "email", label: "Email" },
 ];
 
 export function resolveVariables(content, video) {

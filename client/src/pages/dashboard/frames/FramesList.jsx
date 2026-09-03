@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Plus, Pencil, Copy, Trash2, CheckCircle2, Eye } from "lucide-react";
+import { Plus, Pencil, Copy, Trash2, CheckCircle2, Eye, FileText } from "lucide-react";
 import toast from "react-hot-toast";
 import Topbar from "../../../components/dashboard/Topbar.jsx";
 import FrameRenderer from "../../../components/FrameRenderer.jsx";
@@ -13,7 +13,6 @@ const SAMPLE_VIDEO = {
   doctorName: "Dr. Diwakar Shukla",
   degree: "MBBS",
   specialization: "General Physician",
-  designation: "Senior Consultant",
   title: "Health Tips for Good Sleep",
   description: "Simple tips for better sleep",
   organizationName: "MediCare Clinic",
@@ -76,7 +75,11 @@ export default function FramesList() {
       <Topbar title="Frames" subtitle="Design and manage the branded frame applied to your videos." />
 
       <div className="px-4 py-6 sm:px-8">
-        <div className="mb-5 flex justify-end">
+        <div className="mb-5 flex justify-end gap-2">
+          <Link to={`${FRAME_STUDIO_BASE}/content-templates`} className="btn-secondary">
+            <FileText size={16} />
+            Content Templates
+          </Link>
           <Link to={`${FRAME_STUDIO_BASE}/new`} className="btn-primary">
             <Plus size={16} />
             Create New Frame

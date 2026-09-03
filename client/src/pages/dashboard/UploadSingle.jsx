@@ -9,11 +9,9 @@ const initialForm = {
   doctorName: "",
   degree: "",
   specialization: "",
-  designation: "",
   organizationName: "",
-  title: "",
-  description: "",
   phone: "",
+  email: "",
 };
 
 export default function UploadSingle() {
@@ -84,16 +82,25 @@ export default function UploadSingle() {
               />
             </div>
             <div>
-              <label className="label">Phone (for appointments)</label>
-              <input className="input" placeholder="+91 12345 67890" value={form.phone} onChange={update("phone")} />
-            </div>
-            <div>
-              <label className="label">Designation</label>
+              <label className="label">Phone Number</label>
               <input
                 className="input"
-                placeholder="Senior Consultant"
-                value={form.designation}
-                onChange={update("designation")}
+                type="tel"
+                required
+                placeholder="+91 12345 67890"
+                value={form.phone}
+                onChange={update("phone")}
+              />
+            </div>
+            <div>
+              <label className="label">Email</label>
+              <input
+                className="input"
+                type="email"
+                required
+                placeholder="doctor@clinic.com"
+                value={form.email}
+                onChange={update("email")}
               />
             </div>
             <div>
@@ -105,25 +112,6 @@ export default function UploadSingle() {
                 onChange={update("organizationName")}
               />
             </div>
-          </div>
-          <div>
-            <label className="label">Title</label>
-            <input
-              className="input"
-              placeholder="Health Tips for Good Sleep"
-              value={form.title}
-              onChange={update("title")}
-            />
-          </div>
-          <div>
-            <label className="label">Description</label>
-            <textarea
-              className="input"
-              rows={3}
-              placeholder="Short description shown to patients"
-              value={form.description}
-              onChange={update("description")}
-            />
           </div>
 
           {uploading && (
