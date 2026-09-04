@@ -87,7 +87,7 @@ export const getAnalytics = asyncHandler(async (req, res) => {
       { $sort: { count: -1 } },
       { $limit: 8 },
     ]),
-    Video.find().sort({ views: -1 }).limit(8).select("title doctorName views shareCount slug thumbnailUrl"),
+    Video.find().sort({ views: -1 }).limit(8).select("doctorName email phone views shareCount slug thumbnailUrl"),
   ]);
 
   const topVideoIds = topVideosBase.map((v) => v._id);
@@ -109,8 +109,9 @@ export const getAnalytics = asyncHandler(async (req, res) => {
     const rangeStats = viewsMap.get(v._id.toString());
     return {
       _id: v._id,
-      title: v.title,
       doctorName: v.doctorName,
+      email: v.email,
+      phone: v.phone,
       slug: v.slug,
       thumbnailUrl: v.thumbnailUrl,
       views: v.views,

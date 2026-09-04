@@ -7,8 +7,7 @@ import { uploadVideoToImageKit, deleteFromImageKit } from "../utils/uploadToImag
 import { videoMetaSchema, videoUpdateSchema } from "../validators/video.validator.js";
 import { detectDevice } from "../utils/detectDevice.js";
 import { getActiveFrame } from "../models/Frame.js";
-import { frameVersion } from "../utils/composeFramedVideo.js";
-import { enqueueRender } from "../utils/renderQueue.js";
+import { burnFrameFromUrl } from "../utils/composeFramedVideo.js";
 import { resolveContentTemplate } from "../utils/resolveContentTemplate.js";
 
 export const createVideo = asyncHandler(async (req, res) => {
@@ -36,8 +35,6 @@ export const createVideo = asyncHandler(async (req, res) => {
     uploadedByEmail: req.admin?.email || "",
     uploadedByLocation: req.admin?.location || "",
   });
-
-  enqueueRender(video._id).catch(() => {});
 
   res.status(201).json({
     video,
@@ -114,7 +111,6 @@ export const bulkCreateVideos = asyncHandler(async (req, res) => {
         uploadedByEmail: req.admin.email,
         uploadedByLocation: req.admin.location || "",
       });
-      enqueueRender(video._id).catch(() => {});
       created.push(video);
     } catch (err) {
       errors.push({ fileName: file.originalname, error: err.message || "Upload failed" });
@@ -221,9 +217,6 @@ export const updateVideo = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Video not found");
   }
 
-  // Text fields may feed {{variables}} in the active frame — re-render to reflect the edit.
-  enqueueRender(video._id).catch(() => {});
-
   res.json({ video });
 });
 
@@ -234,7 +227,6 @@ export const deleteVideo = asyncHandler(async (req, res) => {
   }
 
   await deleteFromImageKit(video.imagekitFileId);
-  if (video.renderedImagekitFileId) await deleteFromImageKit(video.renderedImagekitFileId);
   await video.deleteOne();
   AnalyticsEvent.deleteMany({ video: video._id }).catch((err) =>
     console.error("Failed to clean up analytics events:", err.message)
@@ -260,34 +252,41 @@ export const incrementShare = asyncHandler(async (req, res) => {
   res.json({ shareCount: video.shareCount });
 });
 
+// GET, not POST — a plain file download. If the video already has a frame
+// permanently baked in (frameBakedId) or there's no active frame to apply,
+// this just redirects straight to the stored file (instant, ImageKit serves
+// it). Otherwise it burns the active frame in right now and streams the
+// result directly as the response body — nothing is ever uploaded or saved;
+// the burned bytes exist only for the life of this request. That means a
+// video downloaded 10 times gets burned 10 times (no caching), trading
+// upload-time storage for per-download compute — see the conversation this
+// came from for why.
 export const getFramedDownload = asyncHandler(async (req, res) => {
-  let video = await Video.findById(req.params.id);
+  const video = await Video.findById(req.params.id);
   if (!video) {
     throw new ApiError(404, "Video not found");
   }
 
+  if (video.frameBakedId) {
+    return res.redirect(`${video.videoUrl}?ik-attachment=true`);
+  }
+
   const frame = await getActiveFrame();
   if (!frame) {
-    // No frame configured — the original upload is the only file available.
-    return res.json({ url: `${video.videoUrl}?ik-attachment=true` });
+    return res.redirect(`${video.videoUrl}?ik-attachment=true`);
   }
 
-  const version = frameVersion(frame);
-  const isCurrent = video.renderingStatus === "completed" && video.renderedFrameVersion === version;
-
-  if (!isCurrent) {
-    await enqueueRender(video._id);
-    video = await Video.findById(req.params.id);
+  let burnedBuffer;
+  try {
+    burnedBuffer = await burnFrameFromUrl(video.videoUrl, frame, video);
+  } catch (err) {
+    throw new ApiError(500, err.message || "Could not prepare your download");
   }
 
-  if (video.renderingStatus === "failed") {
-    throw new ApiError(500, video.renderingError || "Rendering the framed video failed");
-  }
-  if (video.renderingStatus !== "completed" || !video.renderedUrl) {
-    throw new ApiError(409, "Your video is still processing — try again in a moment");
-  }
-
-  res.json({ url: `${video.renderedUrl}?ik-attachment=true` });
+  res.setHeader("Content-Type", "video/mp4");
+  res.setHeader("Content-Disposition", `attachment; filename="${video.slug}-framed.mp4"`);
+  res.setHeader("Content-Length", burnedBuffer.length);
+  res.send(burnedBuffer);
 });
 
 export const getStats = asyncHandler(async (req, res) => {

@@ -6,13 +6,8 @@ import ffmpegPath from "ffmpeg-static";
 import ffmpeg from "fluent-ffmpeg";
 import axios from "axios";
 import { buildFrameOverlaySvg } from "./renderFrameSvg.js";
-import { getImageKit, imagekitFolder } from "../config/imagekit.js";
 
 ffmpeg.setFfmpegPath(ffmpegPath);
-
-export function frameVersion(frame) {
-  return `${frame._id}-${new Date(frame.updatedAt).getTime()}`;
-}
 
 async function downloadToFile(url, destPath) {
   const response = await axios.get(url, { responseType: "stream", timeout: 120000 });
@@ -50,82 +45,107 @@ async function buildImageDataUriMap(frame) {
   return map;
 }
 
-/**
- * Burns `frame` into `video`'s original file via ffmpeg, uploads the result
- * to ImageKit, and returns its URL/fileId. Does not touch the Video document —
- * callers (server/src/utils/renderQueue.js) own persisting the result.
- */
-export async function composeFramedVideo(video, frame, { onProgress } = {}) {
-  const videoElement = (frame.elements || []).find((el) => el.type === "video" && !el.hidden);
-  if (!videoElement) {
+// Burns `frame` into the video at `inputPath`, writing the result to
+// <workDir>/output.mp4 and returning its path.
+function toEven(n) {
+  const r = Math.round(n);
+  return r % 2 === 0 ? r : r + 1;
+}
+
+async function burnFrame(inputPath, frame, video, workDir) {
+  const rawVideoElement = (frame.elements || []).find((el) => el.type === "video" && !el.hidden);
+  if (!rawVideoElement) {
     throw new Error("This frame has no Video Area element — add one before activating it.");
   }
 
-  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "medishare-render-"));
-  const inputPath = path.join(workDir, "input.mp4");
+  // The designer stores free-form float positions (drag-and-drop), but
+  // ffmpeg's filter graph — and -pix_fmt yuv420p in particular — needs
+  // integer, even-dimensioned geometry for the FINAL encoded canvas size.
+  // CW/CH below are only ever used in the ffmpeg filter graph, not passed
+  // to the SVG renderer — `frame` here is a Mongoose document, and
+  // spreading it (`{...frame, width, height}`) silently drops nested
+  // fields like `background` and `elements` (Mongoose documents don't
+  // spread like plain objects), which quietly broke every frame's
+  // background/text. The 1px (at most) size difference between the SVG
+  // canvas and the padded ffmpeg canvas is visually a non-issue.
+  const CW = toEven(frame.width);
+  const CH = toEven(frame.height);
+  const videoElement = {
+    ...rawVideoElement,
+    x: Math.round(rawVideoElement.x),
+    y: Math.round(rawVideoElement.y),
+    width: Math.round(rawVideoElement.width),
+    height: Math.round(rawVideoElement.height),
+  };
+
   const overlayPath = path.join(workDir, "overlay.png");
   const outputPath = path.join(workDir, "output.mp4");
 
+  const imageDataUriMap = await buildImageDataUriMap(frame);
+  const svg = buildFrameOverlaySvg(frame, video, imageDataUriMap, videoElement);
+  await sharp(Buffer.from(svg)).png().toFile(overlayPath);
+
+  const { x: vx, y: vy, width: vw, height: vh, objectFit } = videoElement;
+
+  const fitFilter =
+    objectFit === "contain"
+      ? `scale=${vw}:${vh}:force_original_aspect_ratio=decrease,pad=${vw}:${vh}:(ow-iw)/2:(oh-ih)/2:color=black`
+      : `scale=${vw}:${vh}:force_original_aspect_ratio=increase,crop=${vw}:${vh}`;
+
+  await new Promise((resolve, reject) => {
+    ffmpeg(inputPath)
+      .input(overlayPath)
+      .complexFilter([
+        `[0:v]${fitFilter},pad=${CW}:${CH}:${vx}:${vy}:color=black[padded]`,
+        `[padded][1:v]overlay=0:0:format=auto[out]`,
+      ])
+      .outputOptions([
+        "-map",
+        "[out]",
+        "-map",
+        "0:a?",
+        "-c:v",
+        "libx264",
+        // Without this, overlaying an RGBA PNG lets ffmpeg pick the filter
+        // graph's own pixel format (often yuv444p/High-4:4:4), which most
+        // consumer players (Windows Media Player, many phones/TVs) can't
+        // play at all ("unsupported format"). yuv420p is the universally
+        // compatible baseline every player supports.
+        "-pix_fmt",
+        "yuv420p",
+        "-preset",
+        "fast",
+        "-crf",
+        "23",
+        "-c:a",
+        "aac",
+        "-shortest",
+        "-movflags",
+        "+faststart",
+      ])
+      .on("error", reject)
+      .on("end", resolve)
+      .save(outputPath);
+  });
+
+  return outputPath;
+}
+
+/**
+ * Downloads the video at `sourceUrl`, burns `frame` into it, and returns the
+ * result as a buffer. Never uploads or persists anything — callers decide
+ * what to do with the buffer (stream it straight to a download response, or
+ * upload it as a video's new primary file for a permanent re-burn).
+ */
+export async function burnFrameFromUrl(sourceUrl, frame, video) {
+  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "medishare-burn-"));
+  const ext = path.extname(new URL(sourceUrl).pathname).split("?")[0] || ".mp4";
+  const inputPath = path.join(workDir, `input${ext}`);
+
   try {
-    const [imageDataUriMap] = await Promise.all([buildImageDataUriMap(frame), downloadToFile(video.videoUrl, inputPath)]);
-
-    const svg = buildFrameOverlaySvg(frame, video, imageDataUriMap, videoElement);
-    await sharp(Buffer.from(svg)).png().toFile(overlayPath);
-
-    const { x: vx, y: vy, width: vw, height: vh, objectFit } = videoElement;
-    const { width: CW, height: CH } = frame;
-
-    const fitFilter =
-      objectFit === "contain"
-        ? `scale=${vw}:${vh}:force_original_aspect_ratio=decrease,pad=${vw}:${vh}:(ow-iw)/2:(oh-ih)/2:color=black`
-        : `scale=${vw}:${vh}:force_original_aspect_ratio=increase,crop=${vw}:${vh}`;
-
-    await new Promise((resolve, reject) => {
-      const command = ffmpeg(inputPath)
-        .input(overlayPath)
-        .complexFilter([
-          `[0:v]${fitFilter},pad=${CW}:${CH}:${vx}:${vy}:color=black[padded]`,
-          `[padded][1:v]overlay=0:0:format=auto[out]`,
-        ])
-        .outputOptions([
-          "-map",
-          "[out]",
-          "-map",
-          "0:a?",
-          "-c:v",
-          "libx264",
-          "-preset",
-          "fast",
-          "-crf",
-          "23",
-          "-c:a",
-          "aac",
-          "-shortest",
-          "-movflags",
-          "+faststart",
-        ])
-        .on("error", reject)
-        .on("end", resolve);
-
-      if (onProgress) {
-        command.on("progress", (p) => {
-          if (typeof p.percent === "number") onProgress(Math.min(99, Math.max(0, Math.round(p.percent))));
-        });
-      }
-
-      command.save(outputPath);
-    });
-
-    const outputBuffer = await fs.readFile(outputPath);
-    const imagekit = getImageKit();
-    const uploaded = await imagekit.upload({
-      file: outputBuffer,
-      fileName: `${video.slug}-framed.mp4`,
-      folder: imagekitFolder("rendered"),
-      useUniqueFileName: true,
-    });
-
-    return { url: uploaded.url, fileId: uploaded.fileId };
+    await downloadToFile(sourceUrl, inputPath);
+    const outputPath = await burnFrame(inputPath, frame, video, workDir);
+    return await fs.readFile(outputPath);
   } finally {
     await fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
   }

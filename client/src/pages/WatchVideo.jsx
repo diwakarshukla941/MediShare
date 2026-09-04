@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Share2, Download, Play } from "lucide-react";
+import { Share2, Download, Play, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
 import Logo from "../components/Logo.jsx";
 import CopyLinkField from "../components/CopyLinkField.jsx";
 import FrameRenderer from "../components/FrameRenderer.jsx";
-import { api, getErrorMessage } from "../lib/api.js";
+import VideoControls from "../components/VideoControls.jsx";
+import { api } from "../lib/api.js";
 import { getSessionId, sendWatchBeacon } from "../lib/session.js";
+import { downloadFramedVideo, getDownloadErrorMessage } from "../lib/downloadVideo.js";
 
 const WATCH_BEACON_INTERVAL_MS = 20000;
 
@@ -100,11 +102,10 @@ export default function WatchVideo() {
     setDownloading(true);
     const toastId = toast.loading("Preparing your video with the frame — this can take a moment...");
     try {
-      const { data } = await api.post(`/videos/${video._id}/download`);
+      await downloadFramedVideo(video._id, `${video.doctorName || "video"}.mp4`);
       toast.success("Your video is ready", { id: toastId });
-      window.location.href = data.url;
     } catch (err) {
-      toast.error(getErrorMessage(err), { id: toastId });
+      toast.error(await getDownloadErrorMessage(err), { id: toastId });
     } finally {
       setDownloading(false);
     }
@@ -136,8 +137,8 @@ export default function WatchVideo() {
         <Logo />
         <div className="flex gap-2">
           <button onClick={download} className="btn-secondary" disabled={downloading}>
-            <Download size={15} />
-            {downloading ? "Preparing..." : "Download"}
+            {downloading ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+            {downloading ? "Burning frame..." : "Download"}
           </button>
           <button onClick={share} className="btn-primary">
             <Share2 size={15} />
@@ -147,16 +148,28 @@ export default function WatchVideo() {
       </header>
 
       <main className="mx-auto max-w-2xl px-4 py-10">
-        <FrameRenderer frame={frame} video={video}>
-          <video
-            ref={videoRef}
-            src={video.videoUrl}
-            poster={video.thumbnailUrl || undefined}
-            controls
-            playsInline
-            className="h-full w-full bg-black object-cover"
-          />
-        </FrameRenderer>
+        <div className="relative">
+          {/* Already has the frame burned into the pixels — no live overlay needed.
+              Without a live overlay to fill, the video sizes itself at its own
+              natural aspect ratio instead of being force-fit/cropped into 16:9. */}
+          <FrameRenderer frame={video.frameBakedId ? null : frame} video={video}>
+            <video
+              ref={videoRef}
+              src={video.videoUrl}
+              poster={video.thumbnailUrl || undefined}
+              playsInline
+              className={
+                video.frameBakedId || !frame
+                  ? "block h-auto w-full bg-black"
+                  : "h-full w-full bg-black object-cover"
+              }
+            />
+          </FrameRenderer>
+          {/* Custom bar spans the whole frame's bottom edge, not just the video
+              window — the native browser controls only ever hug the <video>
+              element itself, which looks disconnected on a portrait frame. */}
+          <VideoControls videoRef={videoRef} />
+        </div>
 
         <div className="mt-6">
           {video.title && <h1 className="text-lg font-bold text-slate-900">{video.title}</h1>}
