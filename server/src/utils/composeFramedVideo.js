@@ -164,3 +164,25 @@ export async function burnFrameFromBuffer(fileBuffer, frame, video, sourceExt = 
     await fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
   }
 }
+
+/**
+ * Downloads the video at `sourceUrl`, burns `frame` into it, and returns the
+ * result as a buffer (does not upload anywhere). Used by the super-admin-only
+ * "re-burn existing videos" tool (server/src/controllers/frame.controller.js)
+ * to convert a still-unbaked video (one with a clean original) into a baked
+ * one — the caller is responsible for uploading the buffer as the video's
+ * new primary file and deleting the old one, so storage never doubles.
+ */
+export async function burnFrameFromUrl(sourceUrl, frame, video) {
+  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "medishare-rebake-"));
+  const ext = path.extname(new URL(sourceUrl).pathname).split("?")[0] || ".mp4";
+  const inputPath = path.join(workDir, `input${ext}`);
+
+  try {
+    await downloadToFile(sourceUrl, inputPath);
+    const outputPath = await burnFrame(inputPath, frame, video, workDir);
+    return await fs.readFile(outputPath);
+  } finally {
+    await fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
+  }
+}

@@ -147,7 +147,9 @@ export default function WatchVideo() {
       </header>
 
       <main className="mx-auto max-w-2xl px-4 py-10">
-        {/* Already has the frame burned into the pixels — no live overlay needed */}
+        {/* Already has the frame burned into the pixels — no live overlay needed.
+            Without a live overlay to fill, the video sizes itself at its own
+            natural aspect ratio instead of being force-fit/cropped into 16:9. */}
         <FrameRenderer frame={video.frameBakedId ? null : frame} video={video}>
           <video
             ref={videoRef}
@@ -155,7 +157,11 @@ export default function WatchVideo() {
             poster={video.thumbnailUrl || undefined}
             controls
             playsInline
-            className="h-full w-full bg-black object-cover"
+            className={
+              video.frameBakedId || !frame
+                ? "block h-auto w-full bg-black"
+                : "h-full w-full bg-black object-cover"
+            }
           />
         </FrameRenderer>
 

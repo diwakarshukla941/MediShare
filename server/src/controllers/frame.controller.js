@@ -4,9 +4,14 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { frameCreateSchema, frameUpdateSchema } from "../validators/frame.validator.js";
 import { getImageKit, imagekitFolder } from "../config/imagekit.js";
-import { deleteFromImageKit } from "../utils/uploadToImageKit.js";
+import { uploadVideoToImageKit, deleteFromImageKit } from "../utils/uploadToImageKit.js";
 import { invalidateAllRenderedVideos } from "../utils/renderQueue.js";
+import { burnFrameFromUrl } from "../utils/composeFramedVideo.js";
 import { AVAILABLE_VARIABLES } from "../utils/resolveVariables.js";
+
+function withMp4Ext(name) {
+  return name.replace(/\.[^./\\]+$/, "") + ".mp4";
+}
 
 export const listFrames = asyncHandler(async (req, res) => {
   const frames = await Frame.find().sort({ createdAt: -1 });
@@ -103,6 +108,62 @@ export const activateFrame = asyncHandler(async (req, res) => {
   const invalidatedCount = await invalidateAllRenderedVideos();
 
   res.json({ frame, invalidatedCount });
+});
+
+// Videos still holding a clean, unframed source — the only ones a frame can
+// ever be burned into. Anything with frameBakedId already set has no clean
+// source left (see Video.frameBakedId) and is permanently excluded.
+export const listUnbakedVideos = asyncHandler(async (req, res) => {
+  const videos = await Video.find({ frameBakedId: null })
+    .select("doctorName email phone fileSize createdAt")
+    .sort({ createdAt: -1 });
+  res.json({ videos });
+});
+
+// Super-admin-only, hidden tool: pick any frame and burn it into a chosen
+// set of still-unbaked videos, one at a time, replacing each video's file
+// in place (old file deleted) so storage never doubles. This is a one-way
+// conversion — once a video is burned this way it behaves exactly like a
+// video baked at upload time (frameBakedId set, permanently locked to this
+// frame; a future frame change won't touch it again).
+export const burnExistingVideos = asyncHandler(async (req, res) => {
+  const frame = await Frame.findById(req.params.id);
+  if (!frame) throw new ApiError(404, "Frame not found");
+
+  const videoIds = Array.isArray(req.body.videoIds) ? req.body.videoIds : [];
+  if (videoIds.length === 0) {
+    throw new ApiError(400, "Select at least one video to burn");
+  }
+
+  const videos = await Video.find({ _id: { $in: videoIds }, frameBakedId: null });
+  const burned = [];
+  const errors = [];
+
+  for (const video of videos) {
+    try {
+      const burnedBuffer = await burnFrameFromUrl(video.videoUrl, frame, video);
+      const uploaded = await uploadVideoToImageKit({
+        buffer: burnedBuffer,
+        originalname: withMp4Ext(video.fileName),
+        mimetype: "video/mp4",
+      });
+
+      const oldFileId = video.imagekitFileId;
+      video.videoUrl = uploaded.url;
+      video.imagekitFileId = uploaded.fileId;
+      video.fileName = uploaded.name;
+      video.fileSize = uploaded.size;
+      video.frameBakedId = frame._id;
+      await video.save();
+
+      deleteFromImageKit(oldFileId).catch(() => {});
+      burned.push({ id: video._id, doctorName: video.doctorName });
+    } catch (err) {
+      errors.push({ id: video._id, doctorName: video.doctorName, error: (err.message || "Failed").slice(0, 300) });
+    }
+  }
+
+  res.json({ burnedCount: burned.length, errorCount: errors.length, burned, errors });
 });
 
 export const uploadFrameAsset = asyncHandler(async (req, res) => {
