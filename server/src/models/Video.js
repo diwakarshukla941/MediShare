@@ -25,7 +25,18 @@ const videoSchema = new mongoose.Schema(
 
     slug: { type: String, required: true, unique: true, index: true, default: () => nanoid(10) },
 
-    // Frame rendering (async, via server/src/utils/renderQueue.js)
+    // Set when the active frame was burned directly into videoUrl at upload
+    // time (see burnFrameFromBuffer) — there is no separate original in that
+    // case, so the watch page plays videoUrl as-is (no live overlay) and
+    // downloads just reuse the same file. A later frame change or edit does
+    // NOT retroactively re-burn this video — only new uploads pick it up.
+    // null for videos uploaded before this existed, or when no frame was
+    // active at upload time; those still use the legacy render-on-download
+    // path below.
+    frameBakedId: { type: mongoose.Schema.Types.ObjectId, ref: "Frame", default: null },
+
+    // Legacy on-demand frame rendering for videos without frameBakedId
+    // (via server/src/utils/renderQueue.js)
     renderedUrl: { type: String, default: "" },
     renderedImagekitFileId: { type: String, default: "" },
     renderingStatus: {

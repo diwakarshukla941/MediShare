@@ -147,7 +147,8 @@ export default function WatchVideo() {
       </header>
 
       <main className="mx-auto max-w-2xl px-4 py-10">
-        <FrameRenderer frame={frame} video={video}>
+        {/* Already has the frame burned into the pixels — no live overlay needed */}
+        <FrameRenderer frame={video.frameBakedId ? null : frame} video={video}>
           <video
             ref={videoRef}
             src={video.videoUrl}

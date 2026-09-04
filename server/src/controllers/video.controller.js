@@ -7,9 +7,46 @@ import { uploadVideoToImageKit, deleteFromImageKit } from "../utils/uploadToImag
 import { videoMetaSchema, videoUpdateSchema } from "../validators/video.validator.js";
 import { detectDevice } from "../utils/detectDevice.js";
 import { getActiveFrame } from "../models/Frame.js";
-import { frameVersion } from "../utils/composeFramedVideo.js";
+import { frameVersion, burnFrameFromBuffer } from "../utils/composeFramedVideo.js";
 import { enqueueRender, invalidateRender } from "../utils/renderQueue.js";
 import { resolveContentTemplate } from "../utils/resolveContentTemplate.js";
+
+const EXT_BY_MIME = {
+  "video/mp4": ".mp4",
+  "video/quicktime": ".mov",
+  "video/x-msvideo": ".avi",
+  "video/webm": ".webm",
+};
+
+function withMp4Ext(originalname) {
+  return originalname.replace(/\.[^./\\]+$/, "") + ".mp4";
+}
+
+// If a frame is active, burns it directly into the raw upload buffer before
+// it ever touches ImageKit — the video is stored once, already framed, with
+// no separate "original" kept. See Video.frameBakedId and the storage
+// trade-off it implies (server/src/models/Video.js). Falls back to
+// uploading the plain file if burning fails for any reason, so a bad frame
+// never blocks an upload.
+async function maybeBakeFrame(file, videoLikeMeta, activeFrame) {
+  if (!activeFrame) return { fileToUpload: file, frameBakedId: null };
+
+  try {
+    const burnedBuffer = await burnFrameFromBuffer(
+      file.buffer,
+      activeFrame,
+      videoLikeMeta,
+      EXT_BY_MIME[file.mimetype] || ".mp4"
+    );
+    return {
+      fileToUpload: { ...file, buffer: burnedBuffer, originalname: withMp4Ext(file.originalname), mimetype: "video/mp4" },
+      frameBakedId: activeFrame._id,
+    };
+  } catch (err) {
+    console.error("Failed to bake frame at upload, storing the unframed original instead:", err.message);
+    return { fileToUpload: file, frameBakedId: null };
+  }
+}
 
 export const createVideo = asyncHandler(async (req, res) => {
   if (!req.file) {
@@ -17,10 +54,10 @@ export const createVideo = asyncHandler(async (req, res) => {
   }
 
   const meta = videoMetaSchema.parse(req.body);
-  const [uploaded, content] = await Promise.all([
-    uploadVideoToImageKit(req.file),
-    resolveContentTemplate(meta.email),
-  ]);
+  const [content, activeFrame] = await Promise.all([resolveContentTemplate(meta.email), getActiveFrame()]);
+
+  const { fileToUpload, frameBakedId } = await maybeBakeFrame(req.file, { ...meta, ...content }, activeFrame);
+  const uploaded = await uploadVideoToImageKit(fileToUpload);
 
   const video = await Video.create({
     ...meta,
@@ -30,6 +67,7 @@ export const createVideo = asyncHandler(async (req, res) => {
     imagekitFileId: uploaded.fileId,
     fileName: uploaded.name,
     fileSize: uploaded.size,
+    frameBakedId,
     source: req.admin ? "dashboard" : "public",
     uploadedBy: req.admin?._id || null,
     uploadedByName: req.admin?.name || "",
@@ -66,6 +104,7 @@ export const bulkCreateVideos = asyncHandler(async (req, res) => {
     rows.map((row) => [String(row.filename || "").trim().toLowerCase(), row])
   );
 
+  const activeFrame = await getActiveFrame();
   const created = [];
   const errors = [];
 
@@ -94,10 +133,13 @@ export const bulkCreateVideos = asyncHandler(async (req, res) => {
     }
 
     try {
-      const [uploaded, content] = await Promise.all([
-        uploadVideoToImageKit(file),
-        resolveContentTemplate(parsedMeta.data.email),
-      ]);
+      const content = await resolveContentTemplate(parsedMeta.data.email);
+      const { fileToUpload, frameBakedId } = await maybeBakeFrame(
+        file,
+        { ...parsedMeta.data, ...content },
+        activeFrame
+      );
+      const uploaded = await uploadVideoToImageKit(fileToUpload);
       const video = await Video.create({
         ...parsedMeta.data,
         ...content,
@@ -106,6 +148,7 @@ export const bulkCreateVideos = asyncHandler(async (req, res) => {
         imagekitFileId: uploaded.fileId,
         fileName: uploaded.name,
         fileSize: uploaded.size,
+        frameBakedId,
         source: "bulk",
         uploadedBy: req.admin._id,
         uploadedByName: req.admin.name,
@@ -262,6 +305,11 @@ export const getFramedDownload = asyncHandler(async (req, res) => {
   let video = await Video.findById(req.params.id);
   if (!video) {
     throw new ApiError(404, "Video not found");
+  }
+
+  if (video.frameBakedId) {
+    // Frame was already burned into videoUrl at upload time — it IS the download.
+    return res.json({ url: `${video.videoUrl}?ik-attachment=true` });
   }
 
   const frame = await getActiveFrame();

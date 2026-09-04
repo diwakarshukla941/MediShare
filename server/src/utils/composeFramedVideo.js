@@ -50,71 +50,85 @@ async function buildImageDataUriMap(frame) {
   return map;
 }
 
-/**
- * Burns `frame` into `video`'s original file via ffmpeg, uploads the result
- * to ImageKit, and returns its URL/fileId. Does not touch the Video document —
- * callers (server/src/utils/renderQueue.js) own persisting the result.
- */
-export async function composeFramedVideo(video, frame, { onProgress } = {}) {
+// Burns `frame` into the video at `inputPath`, writing the result to
+// <workDir>/output.mp4 and returning its path. Shared by both the
+// URL-based (on-demand, legacy) and buffer-based (upload-time) callers below.
+async function burnFrame(inputPath, frame, video, workDir, onProgress) {
   const videoElement = (frame.elements || []).find((el) => el.type === "video" && !el.hidden);
   if (!videoElement) {
     throw new Error("This frame has no Video Area element — add one before activating it.");
   }
 
-  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "medishare-render-"));
-  const inputPath = path.join(workDir, "input.mp4");
   const overlayPath = path.join(workDir, "overlay.png");
   const outputPath = path.join(workDir, "output.mp4");
 
+  const imageDataUriMap = await buildImageDataUriMap(frame);
+  const svg = buildFrameOverlaySvg(frame, video, imageDataUriMap, videoElement);
+  await sharp(Buffer.from(svg)).png().toFile(overlayPath);
+
+  const { x: vx, y: vy, width: vw, height: vh, objectFit } = videoElement;
+  const { width: CW, height: CH } = frame;
+
+  const fitFilter =
+    objectFit === "contain"
+      ? `scale=${vw}:${vh}:force_original_aspect_ratio=decrease,pad=${vw}:${vh}:(ow-iw)/2:(oh-ih)/2:color=black`
+      : `scale=${vw}:${vh}:force_original_aspect_ratio=increase,crop=${vw}:${vh}`;
+
+  await new Promise((resolve, reject) => {
+    const command = ffmpeg(inputPath)
+      .input(overlayPath)
+      .complexFilter([
+        `[0:v]${fitFilter},pad=${CW}:${CH}:${vx}:${vy}:color=black[padded]`,
+        `[padded][1:v]overlay=0:0:format=auto[out]`,
+      ])
+      .outputOptions([
+        "-map",
+        "[out]",
+        "-map",
+        "0:a?",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "fast",
+        "-crf",
+        "23",
+        "-c:a",
+        "aac",
+        "-shortest",
+        "-movflags",
+        "+faststart",
+      ])
+      .on("error", reject)
+      .on("end", resolve);
+
+    if (onProgress) {
+      command.on("progress", (p) => {
+        if (typeof p.percent === "number") onProgress(Math.min(99, Math.max(0, Math.round(p.percent))));
+      });
+    }
+
+    command.save(outputPath);
+  });
+
+  return outputPath;
+}
+
+/**
+ * Burns `frame` into `video`'s original file via ffmpeg, uploads the result
+ * to ImageKit, and returns its URL/fileId. Does not touch the Video document —
+ * callers (server/src/utils/renderQueue.js) own persisting the result.
+ *
+ * This is the legacy/on-demand path: downloads the original from ImageKit
+ * first. New uploads instead burn the frame in synchronously at upload time
+ * (see burnFrameFromBuffer below), which skips this download entirely.
+ */
+export async function composeFramedVideo(video, frame, { onProgress } = {}) {
+  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "medishare-render-"));
+  const inputPath = path.join(workDir, "input.mp4");
+
   try {
-    const [imageDataUriMap] = await Promise.all([buildImageDataUriMap(frame), downloadToFile(video.videoUrl, inputPath)]);
-
-    const svg = buildFrameOverlaySvg(frame, video, imageDataUriMap, videoElement);
-    await sharp(Buffer.from(svg)).png().toFile(overlayPath);
-
-    const { x: vx, y: vy, width: vw, height: vh, objectFit } = videoElement;
-    const { width: CW, height: CH } = frame;
-
-    const fitFilter =
-      objectFit === "contain"
-        ? `scale=${vw}:${vh}:force_original_aspect_ratio=decrease,pad=${vw}:${vh}:(ow-iw)/2:(oh-ih)/2:color=black`
-        : `scale=${vw}:${vh}:force_original_aspect_ratio=increase,crop=${vw}:${vh}`;
-
-    await new Promise((resolve, reject) => {
-      const command = ffmpeg(inputPath)
-        .input(overlayPath)
-        .complexFilter([
-          `[0:v]${fitFilter},pad=${CW}:${CH}:${vx}:${vy}:color=black[padded]`,
-          `[padded][1:v]overlay=0:0:format=auto[out]`,
-        ])
-        .outputOptions([
-          "-map",
-          "[out]",
-          "-map",
-          "0:a?",
-          "-c:v",
-          "libx264",
-          "-preset",
-          "fast",
-          "-crf",
-          "23",
-          "-c:a",
-          "aac",
-          "-shortest",
-          "-movflags",
-          "+faststart",
-        ])
-        .on("error", reject)
-        .on("end", resolve);
-
-      if (onProgress) {
-        command.on("progress", (p) => {
-          if (typeof p.percent === "number") onProgress(Math.min(99, Math.max(0, Math.round(p.percent))));
-        });
-      }
-
-      command.save(outputPath);
-    });
+    await downloadToFile(video.videoUrl, inputPath);
+    const outputPath = await burnFrame(inputPath, frame, video, workDir, onProgress);
 
     const outputBuffer = await fs.readFile(outputPath);
     const imagekit = getImageKit();
@@ -126,6 +140,26 @@ export async function composeFramedVideo(video, frame, { onProgress } = {}) {
     });
 
     return { url: uploaded.url, fileId: uploaded.fileId };
+  } finally {
+    await fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+/**
+ * Burns `frame` into a video file already sitting in memory (the raw
+ * upload buffer, before it's ever touched ImageKit) and returns the
+ * resulting MP4 as a buffer. Used at upload time so the final stored file
+ * already has the frame baked in — no separate original + rendered copy,
+ * and no need to re-download anything from ImageKit to do it.
+ */
+export async function burnFrameFromBuffer(fileBuffer, frame, video, sourceExt = ".mp4") {
+  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "medishare-upload-render-"));
+  const inputPath = path.join(workDir, `input${sourceExt}`);
+
+  try {
+    await fs.writeFile(inputPath, fileBuffer);
+    const outputPath = await burnFrame(inputPath, frame, video, workDir);
+    return await fs.readFile(outputPath);
   } finally {
     await fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
   }
