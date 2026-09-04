@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
-import { Copy, Share2, Pencil, Trash2, Eye, Download, Loader2, AlertCircle, Phone, Mail } from "lucide-react";
+import { useState } from "react";
+import { Copy, Share2, Pencil, Trash2, Eye, Download, Phone, Mail } from "lucide-react";
 import toast from "react-hot-toast";
 import { api, getErrorMessage } from "../lib/api.js";
+import { downloadFramedVideo, getDownloadErrorMessage } from "../lib/downloadVideo.js";
 import ConfirmDialog from "./ConfirmDialog.jsx";
 import EditVideoModal from "./EditVideoModal.jsx";
 
@@ -19,11 +20,10 @@ export default function VideoTable({ videos, onChanged, compact = false }) {
     setDownloadingId(video._id);
     const toastId = toast.loading("Preparing framed video...");
     try {
-      const { data } = await api.post(`/videos/${video._id}/download`);
+      await downloadFramedVideo(video._id, `${video.doctorName || "video"}.mp4`);
       toast.success("Download ready", { id: toastId });
-      window.location.href = data.url;
     } catch (err) {
-      toast.error(getErrorMessage(err), { id: toastId });
+      toast.error(await getDownloadErrorMessage(err), { id: toastId });
     } finally {
       setDownloadingId(null);
     }
@@ -54,13 +54,6 @@ export default function VideoTable({ videos, onChanged, compact = false }) {
     }
     copyLink(video);
   };
-
-  useEffect(() => {
-    const hasActive = videos.some((v) => v.renderingStatus === "pending" || v.renderingStatus === "processing");
-    if (!hasActive) return undefined;
-    const t = setInterval(() => onChanged(), 4000);
-    return () => clearInterval(t);
-  }, [videos, onChanged]);
 
   const confirmDelete = async () => {
     setBusy(true);
@@ -118,18 +111,6 @@ export default function VideoTable({ videos, onChanged, compact = false }) {
                       {video.email}
                     </span>
                   </p>
-                  {(video.renderingStatus === "pending" || video.renderingStatus === "processing") && (
-                    <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-600">
-                      <Loader2 size={10} className="animate-spin" />
-                      Processing{video.renderProgress ? ` ${video.renderProgress}%` : "..."}
-                    </span>
-                  )}
-                  {video.renderingStatus === "failed" && (
-                    <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-medium text-red-600">
-                      <AlertCircle size={10} />
-                      Render failed
-                    </span>
-                  )}
                 </td>
                 <td className="px-5 py-3.5 text-slate-600">
                   <span className="inline-flex items-center gap-1.5">

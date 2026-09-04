@@ -6,13 +6,8 @@ import ffmpegPath from "ffmpeg-static";
 import ffmpeg from "fluent-ffmpeg";
 import axios from "axios";
 import { buildFrameOverlaySvg } from "./renderFrameSvg.js";
-import { getImageKit, imagekitFolder } from "../config/imagekit.js";
 
 ffmpeg.setFfmpegPath(ffmpegPath);
-
-export function frameVersion(frame) {
-  return `${frame._id}-${new Date(frame.updatedAt).getTime()}`;
-}
 
 async function downloadToFile(url, destPath) {
   const response = await axios.get(url, { responseType: "stream", timeout: 120000 });
@@ -51,9 +46,8 @@ async function buildImageDataUriMap(frame) {
 }
 
 // Burns `frame` into the video at `inputPath`, writing the result to
-// <workDir>/output.mp4 and returning its path. Shared by both the
-// URL-based (on-demand, legacy) and buffer-based (upload-time) callers below.
-async function burnFrame(inputPath, frame, video, workDir, onProgress) {
+// <workDir>/output.mp4 and returning its path.
+async function burnFrame(inputPath, frame, video, workDir) {
   const videoElement = (frame.elements || []).find((el) => el.type === "video" && !el.hidden);
   if (!videoElement) {
     throw new Error("This frame has no Video Area element — add one before activating it.");
@@ -75,7 +69,7 @@ async function burnFrame(inputPath, frame, video, workDir, onProgress) {
       : `scale=${vw}:${vh}:force_original_aspect_ratio=increase,crop=${vw}:${vh}`;
 
   await new Promise((resolve, reject) => {
-    const command = ffmpeg(inputPath)
+    ffmpeg(inputPath)
       .input(overlayPath)
       .complexFilter([
         `[0:v]${fitFilter},pad=${CW}:${CH}:${vx}:${vy}:color=black[padded]`,
@@ -99,82 +93,21 @@ async function burnFrame(inputPath, frame, video, workDir, onProgress) {
         "+faststart",
       ])
       .on("error", reject)
-      .on("end", resolve);
-
-    if (onProgress) {
-      command.on("progress", (p) => {
-        if (typeof p.percent === "number") onProgress(Math.min(99, Math.max(0, Math.round(p.percent))));
-      });
-    }
-
-    command.save(outputPath);
+      .on("end", resolve)
+      .save(outputPath);
   });
 
   return outputPath;
 }
 
 /**
- * Burns `frame` into `video`'s original file via ffmpeg, uploads the result
- * to ImageKit, and returns its URL/fileId. Does not touch the Video document —
- * callers (server/src/utils/renderQueue.js) own persisting the result.
- *
- * This is the legacy/on-demand path: downloads the original from ImageKit
- * first. New uploads instead burn the frame in synchronously at upload time
- * (see burnFrameFromBuffer below), which skips this download entirely.
- */
-export async function composeFramedVideo(video, frame, { onProgress } = {}) {
-  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "medishare-render-"));
-  const inputPath = path.join(workDir, "input.mp4");
-
-  try {
-    await downloadToFile(video.videoUrl, inputPath);
-    const outputPath = await burnFrame(inputPath, frame, video, workDir, onProgress);
-
-    const outputBuffer = await fs.readFile(outputPath);
-    const imagekit = getImageKit();
-    const uploaded = await imagekit.upload({
-      file: outputBuffer,
-      fileName: `${video.slug}-framed.mp4`,
-      folder: imagekitFolder("rendered"),
-      useUniqueFileName: true,
-    });
-
-    return { url: uploaded.url, fileId: uploaded.fileId };
-  } finally {
-    await fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
-  }
-}
-
-/**
- * Burns `frame` into a video file already sitting in memory (the raw
- * upload buffer, before it's ever touched ImageKit) and returns the
- * resulting MP4 as a buffer. Used at upload time so the final stored file
- * already has the frame baked in — no separate original + rendered copy,
- * and no need to re-download anything from ImageKit to do it.
- */
-export async function burnFrameFromBuffer(fileBuffer, frame, video, sourceExt = ".mp4") {
-  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "medishare-upload-render-"));
-  const inputPath = path.join(workDir, `input${sourceExt}`);
-
-  try {
-    await fs.writeFile(inputPath, fileBuffer);
-    const outputPath = await burnFrame(inputPath, frame, video, workDir);
-    return await fs.readFile(outputPath);
-  } finally {
-    await fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
-  }
-}
-
-/**
  * Downloads the video at `sourceUrl`, burns `frame` into it, and returns the
- * result as a buffer (does not upload anywhere). Used by the super-admin-only
- * "re-burn existing videos" tool (server/src/controllers/frame.controller.js)
- * to convert a still-unbaked video (one with a clean original) into a baked
- * one — the caller is responsible for uploading the buffer as the video's
- * new primary file and deleting the old one, so storage never doubles.
+ * result as a buffer. Never uploads or persists anything — callers decide
+ * what to do with the buffer (stream it straight to a download response, or
+ * upload it as a video's new primary file for a permanent re-burn).
  */
 export async function burnFrameFromUrl(sourceUrl, frame, video) {
-  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "medishare-rebake-"));
+  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "medishare-burn-"));
   const ext = path.extname(new URL(sourceUrl).pathname).split("?")[0] || ".mp4";
   const inputPath = path.join(workDir, `input${ext}`);
 

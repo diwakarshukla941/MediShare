@@ -5,8 +5,9 @@ import toast from "react-hot-toast";
 import Logo from "../components/Logo.jsx";
 import CopyLinkField from "../components/CopyLinkField.jsx";
 import FrameRenderer from "../components/FrameRenderer.jsx";
-import { api, getErrorMessage } from "../lib/api.js";
+import { api } from "../lib/api.js";
 import { getSessionId, sendWatchBeacon } from "../lib/session.js";
+import { downloadFramedVideo, getDownloadErrorMessage } from "../lib/downloadVideo.js";
 
 const WATCH_BEACON_INTERVAL_MS = 20000;
 
@@ -100,11 +101,10 @@ export default function WatchVideo() {
     setDownloading(true);
     const toastId = toast.loading("Preparing your video with the frame — this can take a moment...");
     try {
-      const { data } = await api.post(`/videos/${video._id}/download`);
+      await downloadFramedVideo(video._id, `${video.doctorName || "video"}.mp4`);
       toast.success("Your video is ready", { id: toastId });
-      window.location.href = data.url;
     } catch (err) {
-      toast.error(getErrorMessage(err), { id: toastId });
+      toast.error(await getDownloadErrorMessage(err), { id: toastId });
     } finally {
       setDownloading(false);
     }

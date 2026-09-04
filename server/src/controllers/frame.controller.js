@@ -5,7 +5,6 @@ import { ApiError } from "../utils/ApiError.js";
 import { frameCreateSchema, frameUpdateSchema } from "../validators/frame.validator.js";
 import { getImageKit, imagekitFolder } from "../config/imagekit.js";
 import { uploadVideoToImageKit, deleteFromImageKit } from "../utils/uploadToImageKit.js";
-import { invalidateAllRenderedVideos } from "../utils/renderQueue.js";
 import { burnFrameFromUrl } from "../utils/composeFramedVideo.js";
 import { AVAILABLE_VARIABLES } from "../utils/resolveVariables.js";
 
@@ -16,8 +15,8 @@ function withMp4Ext(name) {
 export const listFrames = asyncHandler(async (req, res) => {
   const frames = await Frame.find().sort({ createdAt: -1 });
   const usageCounts = await Video.aggregate([
-    { $match: { renderedFrameId: { $ne: null } } },
-    { $group: { _id: "$renderedFrameId", count: { $sum: 1 } } },
+    { $match: { frameBakedId: { $ne: null } } },
+    { $group: { _id: "$frameBakedId", count: { $sum: 1 } } },
   ]);
   const usageMap = new Map(usageCounts.map((u) => [u._id.toString(), u.count]));
 
@@ -72,9 +71,9 @@ export const deleteFrame = asyncHandler(async (req, res) => {
   const frame = await Frame.findById(req.params.id);
   if (!frame) throw new ApiError(404, "Frame not found");
 
-  const usageCount = await Video.countDocuments({ renderedFrameId: frame._id });
+  const usageCount = await Video.countDocuments({ frameBakedId: frame._id });
   if (usageCount > 0 && req.query.confirm !== "true") {
-    throw new ApiError(409, `This frame is used by ${usageCount} rendered video(s). Confirm to delete anyway.`, {
+    throw new ApiError(409, `This frame is permanently burned into ${usageCount} video(s). Confirm to delete anyway.`, {
       usageCount,
     });
   }
@@ -100,14 +99,11 @@ export const activateFrame = asyncHandler(async (req, res) => {
   frame.isActive = true;
   await frame.save();
 
-  // Every existing rendered (burned-in) copy was rendered against the old
-  // frame — drop them all rather than re-rendering upfront. A fresh copy
-  // is only ever generated lazily, on the next actual download request
-  // (see renderQueue.js) — most videos are watched, not downloaded, and
-  // the watch page never uses the rendered copy anyway.
-  const invalidatedCount = await invalidateAllRenderedVideos();
-
-  res.json({ frame, invalidatedCount });
+  // Nothing to re-render — unbaked videos never have a cached burned copy
+  // to invalidate (watch pages overlay the active frame live, and downloads
+  // always burn fresh on the spot). Only frameBakedId videos are unaffected
+  // by this activation at all, by design.
+  res.json({ frame });
 });
 
 // Videos still holding a clean, unframed source — the only ones a frame can

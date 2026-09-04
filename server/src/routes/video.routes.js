@@ -26,7 +26,7 @@ router.post("/", publicUploadLimiter, optionalAuth, requirePermission("videos:up
 router.get("/public/:slug", getPublicVideo);
 router.post("/:id/share", incrementShare);
 router.post("/:id/track-watch", trackLimiter, trackWatch);
-router.post("/:id/download", downloadLimiter, getFramedDownload);
+router.get("/:id/download", downloadLimiter, getFramedDownload);
 router.get("/stats", requireAuth, requirePermission("videos:view"), getStats);
 router.get("/sample-csv", requireAuth, requirePermission("videos:bulk_upload"), getSampleCsv);
 
