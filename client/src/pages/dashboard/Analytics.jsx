@@ -302,8 +302,11 @@ export default function Analytics() {
                     {data.topVideos.map((v) => (
                       <tr key={v._id} className="hover:bg-slate-50/60">
                         <td className="max-w-[220px] px-5 py-3">
-                          <p className="truncate font-medium text-slate-900">{v.title || "Untitled video"}</p>
-                          <p className="truncate text-xs text-slate-500">{v.doctorName}</p>
+                          <p className="truncate font-medium text-slate-900">{v.doctorName}</p>
+                          <p className="truncate text-xs text-slate-500">
+                            {v.email}
+                            {v.phone ? ` · ${v.phone}` : ""}
+                          </p>
                         </td>
                         <td className="px-5 py-3 text-slate-600">{v.views}</td>
                         <td className="px-5 py-3 text-slate-600">{v.uniqueViews}</td>
