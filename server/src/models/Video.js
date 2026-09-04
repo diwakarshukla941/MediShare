@@ -25,18 +25,19 @@ const videoSchema = new mongoose.Schema(
 
     slug: { type: String, required: true, unique: true, index: true, default: () => nanoid(10) },
 
-    // Frame rendering (async, via server/src/utils/renderQueue.js)
-    renderedUrl: { type: String, default: "" },
-    renderedImagekitFileId: { type: String, default: "" },
-    renderingStatus: {
-      type: String,
-      enum: ["none", "pending", "processing", "completed", "failed"],
-      default: "none",
-    },
-    renderingError: { type: String, default: "" },
-    renderProgress: { type: Number, default: 0 },
-    renderedFrameId: { type: mongoose.Schema.Types.ObjectId, ref: "Frame", default: null },
-    renderedFrameVersion: { type: String, default: "" },
+    // videoUrl is always the ONLY stored copy — no separate original +
+    // rendered pair. Normally it's the raw upload: the watch page overlays
+    // the active frame live (FrameRenderer), and downloads burn the frame
+    // in on the fly and stream it straight to the browser without ever
+    // saving that burned copy (see getFramedDownload). frameBakedId is set
+    // only when a video has been permanently, deliberately locked to one
+    // specific frame instead — either an older upload (from when frames
+    // were burned in at upload time) or the super-admin-only "re-burn
+    // existing videos" tool (frame.controller.js). In that case videoUrl
+    // itself already has the frame burned in, so the watch page plays it
+    // as-is and downloads just reuse the same file — a later frame change
+    // does NOT retroactively touch it.
+    frameBakedId: { type: mongoose.Schema.Types.ObjectId, ref: "Frame", default: null },
 
     views: { type: Number, default: 0 },
     shareCount: { type: Number, default: 0 },

@@ -120,8 +120,11 @@ function ShapeElement({ el, frame }) {
  */
 export default function FrameRenderer({ frame, video, children }) {
   if (!frame) {
+    // No frame to overlay — let the content (a <video>) size itself at its
+    // own natural aspect ratio instead of forcing a fixed box, so square,
+    // portrait, and landscape videos all display correctly (see WatchVideo.jsx).
     return (
-      <div className="relative mx-auto aspect-video w-full overflow-hidden rounded-2xl bg-black shadow-lg">
+      <div className="relative mx-auto w-full overflow-hidden rounded-2xl bg-black shadow-lg">
         {children}
       </div>
     );
