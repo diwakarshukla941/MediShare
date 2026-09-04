@@ -47,11 +47,36 @@ async function buildImageDataUriMap(frame) {
 
 // Burns `frame` into the video at `inputPath`, writing the result to
 // <workDir>/output.mp4 and returning its path.
+function toEven(n) {
+  const r = Math.round(n);
+  return r % 2 === 0 ? r : r + 1;
+}
+
 async function burnFrame(inputPath, frame, video, workDir) {
-  const videoElement = (frame.elements || []).find((el) => el.type === "video" && !el.hidden);
-  if (!videoElement) {
+  const rawVideoElement = (frame.elements || []).find((el) => el.type === "video" && !el.hidden);
+  if (!rawVideoElement) {
     throw new Error("This frame has no Video Area element — add one before activating it.");
   }
+
+  // The designer stores free-form float positions (drag-and-drop), but
+  // ffmpeg's filter graph — and -pix_fmt yuv420p in particular — needs
+  // integer, even-dimensioned geometry for the FINAL encoded canvas size.
+  // CW/CH below are only ever used in the ffmpeg filter graph, not passed
+  // to the SVG renderer — `frame` here is a Mongoose document, and
+  // spreading it (`{...frame, width, height}`) silently drops nested
+  // fields like `background` and `elements` (Mongoose documents don't
+  // spread like plain objects), which quietly broke every frame's
+  // background/text. The 1px (at most) size difference between the SVG
+  // canvas and the padded ffmpeg canvas is visually a non-issue.
+  const CW = toEven(frame.width);
+  const CH = toEven(frame.height);
+  const videoElement = {
+    ...rawVideoElement,
+    x: Math.round(rawVideoElement.x),
+    y: Math.round(rawVideoElement.y),
+    width: Math.round(rawVideoElement.width),
+    height: Math.round(rawVideoElement.height),
+  };
 
   const overlayPath = path.join(workDir, "overlay.png");
   const outputPath = path.join(workDir, "output.mp4");
@@ -61,7 +86,6 @@ async function burnFrame(inputPath, frame, video, workDir) {
   await sharp(Buffer.from(svg)).png().toFile(overlayPath);
 
   const { x: vx, y: vy, width: vw, height: vh, objectFit } = videoElement;
-  const { width: CW, height: CH } = frame;
 
   const fitFilter =
     objectFit === "contain"
@@ -82,6 +106,13 @@ async function burnFrame(inputPath, frame, video, workDir) {
         "0:a?",
         "-c:v",
         "libx264",
+        // Without this, overlaying an RGBA PNG lets ffmpeg pick the filter
+        // graph's own pixel format (often yuv444p/High-4:4:4), which most
+        // consumer players (Windows Media Player, many phones/TVs) can't
+        // play at all ("unsupported format"). yuv420p is the universally
+        // compatible baseline every player supports.
+        "-pix_fmt",
+        "yuv420p",
         "-preset",
         "fast",
         "-crf",
