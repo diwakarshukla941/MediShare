@@ -8,7 +8,7 @@ import { videoMetaSchema, videoUpdateSchema } from "../validators/video.validato
 import { detectDevice } from "../utils/detectDevice.js";
 import { getActiveFrame } from "../models/Frame.js";
 import { frameVersion } from "../utils/composeFramedVideo.js";
-import { enqueueRender } from "../utils/renderQueue.js";
+import { enqueueRender, invalidateRender } from "../utils/renderQueue.js";
 import { resolveContentTemplate } from "../utils/resolveContentTemplate.js";
 
 export const createVideo = asyncHandler(async (req, res) => {
@@ -36,8 +36,6 @@ export const createVideo = asyncHandler(async (req, res) => {
     uploadedByEmail: req.admin?.email || "",
     uploadedByLocation: req.admin?.location || "",
   });
-
-  enqueueRender(video._id).catch(() => {});
 
   res.status(201).json({
     video,
@@ -114,7 +112,6 @@ export const bulkCreateVideos = asyncHandler(async (req, res) => {
         uploadedByEmail: req.admin.email,
         uploadedByLocation: req.admin.location || "",
       });
-      enqueueRender(video._id).catch(() => {});
       created.push(video);
     } catch (err) {
       errors.push({ fileName: file.originalname, error: err.message || "Upload failed" });
@@ -221,8 +218,9 @@ export const updateVideo = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Video not found");
   }
 
-  // Text fields may feed {{variables}} in the active frame — re-render to reflect the edit.
-  enqueueRender(video._id).catch(() => {});
+  // Text fields may feed {{variables}} in the active frame — drop any existing
+  // rendered copy so the next download picks up the edit (see renderQueue.js).
+  invalidateRender(video._id).catch(() => {});
 
   res.json({ video });
 });

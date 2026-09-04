@@ -5,7 +5,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { frameCreateSchema, frameUpdateSchema } from "../validators/frame.validator.js";
 import { getImageKit, imagekitFolder } from "../config/imagekit.js";
 import { deleteFromImageKit } from "../utils/uploadToImageKit.js";
-import { enqueueRenderForAllVideos } from "../utils/renderQueue.js";
+import { invalidateAllRenderedVideos } from "../utils/renderQueue.js";
 import { AVAILABLE_VARIABLES } from "../utils/resolveVariables.js";
 
 export const listFrames = asyncHandler(async (req, res) => {
@@ -95,9 +95,14 @@ export const activateFrame = asyncHandler(async (req, res) => {
   frame.isActive = true;
   await frame.save();
 
-  const queuedCount = await enqueueRenderForAllVideos();
+  // Every existing rendered (burned-in) copy was rendered against the old
+  // frame — drop them all rather than re-rendering upfront. A fresh copy
+  // is only ever generated lazily, on the next actual download request
+  // (see renderQueue.js) — most videos are watched, not downloaded, and
+  // the watch page never uses the rendered copy anyway.
+  const invalidatedCount = await invalidateAllRenderedVideos();
 
-  res.json({ frame, queuedCount });
+  res.json({ frame, invalidatedCount });
 });
 
 export const uploadFrameAsset = asyncHandler(async (req, res) => {

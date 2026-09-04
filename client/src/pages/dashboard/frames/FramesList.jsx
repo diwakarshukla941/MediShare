@@ -39,7 +39,7 @@ export default function FramesList() {
     const toastId = toast.loading(`Activating "${frame.name}"...`);
     try {
       const { data } = await api.post(`/frames/${frame._id}/activate`);
-      toast.success(`Active — re-rendering ${data.queuedCount} video(s) in the background`, { id: toastId });
+      toast.success("Active — videos will render with this frame the next time they're downloaded", { id: toastId });
       load();
     } catch (err) {
       toast.error(getErrorMessage(err), { id: toastId });
