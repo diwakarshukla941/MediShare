@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Copy, Share2, Pencil, Trash2, Eye, Download, Phone, Mail } from "lucide-react";
+import { Copy, Share2, Pencil, Trash2, Eye, Download, Loader2, Phone, Mail } from "lucide-react";
 import toast from "react-hot-toast";
 import { api, getErrorMessage } from "../lib/api.js";
 import { downloadFramedVideo, getDownloadErrorMessage } from "../lib/downloadVideo.js";
@@ -163,12 +163,16 @@ export default function VideoTable({ videos, onChanged, compact = false }) {
                       <Share2 size={16} />
                     </button>
                     <button
-                      title="Download with frame"
+                      title={downloadingId === video._id ? "Burning frame into video..." : "Download with frame"}
                       onClick={() => downloadFramed(video)}
                       disabled={downloadingId === video._id}
                       className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
                     >
-                      <Download size={16} />
+                      {downloadingId === video._id ? (
+                        <Loader2 size={16} className="animate-spin" />
+                      ) : (
+                        <Download size={16} />
+                      )}
                     </button>
                     <button
                       title="Edit info"

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Share2, Download, Play } from "lucide-react";
+import { Share2, Download, Play, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
 import Logo from "../components/Logo.jsx";
 import CopyLinkField from "../components/CopyLinkField.jsx";
@@ -136,8 +136,8 @@ export default function WatchVideo() {
         <Logo />
         <div className="flex gap-2">
           <button onClick={download} className="btn-secondary" disabled={downloading}>
-            <Download size={15} />
-            {downloading ? "Preparing..." : "Download"}
+            {downloading ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+            {downloading ? "Burning frame..." : "Download"}
           </button>
           <button onClick={share} className="btn-primary">
             <Share2 size={15} />
