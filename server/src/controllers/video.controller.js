@@ -1,3 +1,4 @@
+import fs from "fs";
 import { parseSheetFile } from "../utils/parseSheetFile.js";
 import { Video } from "../models/Video.js";
 import { AnalyticsEvent } from "../models/AnalyticsEvent.js";
@@ -7,8 +8,12 @@ import { uploadVideoToImageKit, deleteFromImageKit } from "../utils/uploadToImag
 import { videoMetaSchema, videoUpdateSchema } from "../validators/video.validator.js";
 import { detectDevice } from "../utils/detectDevice.js";
 import { getActiveFrame } from "../models/Frame.js";
-import { burnFrameFromUrl } from "../utils/composeFramedVideo.js";
+import { burnFrameToTempFile } from "../utils/composeFramedVideo.js";
 import { resolveContentTemplate } from "../utils/resolveContentTemplate.js";
+
+function cleanupTempFile(file) {
+  if (file?.path) fs.promises.unlink(file.path).catch(() => {});
+}
 
 export const createVideo = asyncHandler(async (req, res) => {
   if (!req.file) {
@@ -56,9 +61,12 @@ export const bulkCreateVideos = asyncHandler(async (req, res) => {
 
   let rows;
   try {
-    rows = parseSheetFile(sheetFile);
+    const sheetBuffer = sheetFile.path ? await fs.promises.readFile(sheetFile.path) : sheetFile.buffer;
+    rows = parseSheetFile({ ...sheetFile, buffer: sheetBuffer });
   } catch {
     throw new ApiError(400, "Could not parse the metadata file. Please use the sample template.");
+  } finally {
+    cleanupTempFile(sheetFile);
   }
 
   const rowsByFileName = new Map(
@@ -72,6 +80,7 @@ export const bulkCreateVideos = asyncHandler(async (req, res) => {
     const row = rowsByFileName.get(file.originalname.trim().toLowerCase());
     if (!row) {
       errors.push({ fileName: file.originalname, error: "No matching row in CSV (check the fileName column)" });
+      cleanupTempFile(file);
       continue;
     }
 
@@ -89,6 +98,7 @@ export const bulkCreateVideos = asyncHandler(async (req, res) => {
         fileName: file.originalname,
         error: parsedMeta.error.issues.map((i) => i.message).join(", "),
       });
+      cleanupTempFile(file);
       continue;
     }
 
@@ -276,17 +286,19 @@ export const getFramedDownload = asyncHandler(async (req, res) => {
     return res.redirect(`${video.videoUrl}?ik-attachment=true`);
   }
 
-  let burnedBuffer;
+  let burned;
   try {
-    burnedBuffer = await burnFrameFromUrl(video.videoUrl, frame, video);
+    burned = await burnFrameToTempFile(video.videoUrl, frame, video);
   } catch (err) {
     throw new ApiError(500, err.message || "Could not prepare your download");
   }
 
   res.setHeader("Content-Type", "video/mp4");
   res.setHeader("Content-Disposition", `attachment; filename="${video.slug}-framed.mp4"`);
-  res.setHeader("Content-Length", burnedBuffer.length);
-  res.send(burnedBuffer);
+  const stream = fs.createReadStream(burned.path);
+  stream.on("close", burned.cleanup);
+  stream.on("error", burned.cleanup);
+  stream.pipe(res);
 });
 
 export const getStats = asyncHandler(async (req, res) => {

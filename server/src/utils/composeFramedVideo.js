@@ -132,21 +132,26 @@ async function burnFrame(inputPath, frame, video, workDir) {
 }
 
 /**
- * Downloads the video at `sourceUrl`, burns `frame` into it, and returns the
- * result as a buffer. Never uploads or persists anything — callers decide
- * what to do with the buffer (stream it straight to a download response, or
- * upload it as a video's new primary file for a permanent re-burn).
+ * Downloads the video at `sourceUrl`, burns `frame` into it, and leaves the
+ * result sitting on disk — returns { path, cleanup() }. Deliberately never
+ * reads the output into a Buffer: on a memory-constrained server, holding a
+ * whole video in RAM is exactly what crashes the process (see the OOM fix
+ * this came from). Callers must call cleanup() once they're done with the
+ * file (stream it to a download response, or upload it from disk for a
+ * permanent re-burn) — it deletes the whole temp work directory.
  */
-export async function burnFrameFromUrl(sourceUrl, frame, video) {
+export async function burnFrameToTempFile(sourceUrl, frame, video) {
   const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "medishare-burn-"));
   const ext = path.extname(new URL(sourceUrl).pathname).split("?")[0] || ".mp4";
   const inputPath = path.join(workDir, `input${ext}`);
+  const cleanup = () => fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
 
   try {
     await downloadToFile(sourceUrl, inputPath);
     const outputPath = await burnFrame(inputPath, frame, video, workDir);
-    return await fs.readFile(outputPath);
-  } finally {
-    await fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
+    return { path: outputPath, cleanup };
+  } catch (err) {
+    await cleanup();
+    throw err;
   }
 }
