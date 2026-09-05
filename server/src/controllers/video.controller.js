@@ -8,7 +8,8 @@ import { uploadVideoToImageKit, deleteFromImageKit } from "../utils/uploadToImag
 import { videoMetaSchema, videoUpdateSchema } from "../validators/video.validator.js";
 import { detectDevice } from "../utils/detectDevice.js";
 import { getActiveFrame } from "../models/Frame.js";
-import { burnFrameToTempFile } from "../utils/composeFramedVideo.js";
+import { burnFrameToTempFile, frameVersion } from "../utils/composeFramedVideo.js";
+import { enqueueBurn } from "../utils/burnQueue.js";
 import { resolveContentTemplate } from "../utils/resolveContentTemplate.js";
 
 function cleanupTempFile(file) {
@@ -222,10 +223,22 @@ export const trackWatch = asyncHandler(async (req, res) => {
 export const updateVideo = asyncHandler(async (req, res) => {
   const updates = videoUpdateSchema.parse(req.body);
 
-  const video = await Video.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
+  const video = await Video.findById(req.params.id);
   if (!video) {
     throw new ApiError(404, "Video not found");
   }
+
+  // The video's own fields can feed {{variables}} in the active frame, so any
+  // previously cached burned copy is stale the moment they change — clear it
+  // so the next download re-renders instead of serving outdated text/branding.
+  const oldCachedFileId = video.cachedRenderImagekitFileId;
+  Object.assign(video, updates, {
+    cachedRenderUrl: "",
+    cachedRenderImagekitFileId: "",
+    cachedRenderFrameVersion: "",
+  });
+  await video.save();
+  if (oldCachedFileId) deleteFromImageKit(oldCachedFileId).catch(() => {});
 
   res.json({ video });
 });
@@ -237,6 +250,9 @@ export const deleteVideo = asyncHandler(async (req, res) => {
   }
 
   await deleteFromImageKit(video.imagekitFileId);
+  if (video.cachedRenderImagekitFileId) {
+    await deleteFromImageKit(video.cachedRenderImagekitFileId);
+  }
   await video.deleteOne();
   AnalyticsEvent.deleteMany({ video: video._id }).catch((err) =>
     console.error("Failed to clean up analytics events:", err.message)
@@ -265,12 +281,12 @@ export const incrementShare = asyncHandler(async (req, res) => {
 // GET, not POST — a plain file download. If the video already has a frame
 // permanently baked in (frameBakedId) or there's no active frame to apply,
 // this just redirects straight to the stored file (instant, ImageKit serves
-// it). Otherwise it burns the active frame in right now and streams the
-// result directly as the response body — nothing is ever uploaded or saved;
-// the burned bytes exist only for the life of this request. That means a
-// video downloaded 10 times gets burned 10 times (no caching), trading
-// upload-time storage for per-download compute — see the conversation this
-// came from for why.
+// it). Otherwise it's an unbaked video: the first download for a given
+// video+frame pairing burns the frame in, uploads the result to ImageKit,
+// and remembers it (cachedRenderUrl/cachedRenderFrameVersion) so every
+// later download of that same pairing just redirects to the cached file
+// instantly instead of re-burning. Editing the video (updateVideo) or the
+// frame (its updatedAt bumps, changing frameVersion) invalidates the cache.
 export const getFramedDownload = asyncHandler(async (req, res) => {
   const video = await Video.findById(req.params.id);
   if (!video) {
@@ -286,19 +302,38 @@ export const getFramedDownload = asyncHandler(async (req, res) => {
     return res.redirect(`${video.videoUrl}?ik-attachment=true`);
   }
 
-  let burned;
-  try {
-    burned = await burnFrameToTempFile(video.videoUrl, frame, video);
-  } catch (err) {
-    throw new ApiError(500, err.message || "Could not prepare your download");
+  const currentVersion = frameVersion(frame);
+  if (video.cachedRenderUrl && video.cachedRenderFrameVersion === currentVersion) {
+    return res.redirect(`${video.cachedRenderUrl}?ik-attachment=true`);
   }
 
-  res.setHeader("Content-Type", "video/mp4");
-  res.setHeader("Content-Disposition", `attachment; filename="${video.slug}-framed.mp4"`);
-  const stream = fs.createReadStream(burned.path);
-  stream.on("close", burned.cleanup);
-  stream.on("error", burned.cleanup);
-  stream.pipe(res);
+  let burned;
+  try {
+    // Queued so at most one ffmpeg burn ever runs at a time — several
+    // running together is a fast way to exceed a small container's memory,
+    // even if each one alone would have been fine.
+    burned = await enqueueBurn(() => burnFrameToTempFile(video.videoUrl, frame, video));
+    // uploadVideoToImageKit streams from disk and deletes burned.path itself
+    // once done — no separate cleanup call needed on success.
+    const uploaded = await uploadVideoToImageKit({
+      path: burned.path,
+      originalname: `${video.slug}-framed.mp4`,
+      mimetype: "video/mp4",
+    });
+
+    const oldCachedFileId = video.cachedRenderImagekitFileId;
+    video.cachedRenderUrl = uploaded.url;
+    video.cachedRenderImagekitFileId = uploaded.fileId;
+    video.cachedRenderFrameVersion = currentVersion;
+    await video.save();
+    if (oldCachedFileId) deleteFromImageKit(oldCachedFileId).catch(() => {});
+
+    return res.redirect(`${uploaded.url}?ik-attachment=true`);
+  } catch (err) {
+    throw new ApiError(500, err.message || "Could not prepare your download");
+  } finally {
+    await burned?.cleanup();
+  }
 });
 
 export const getStats = asyncHandler(async (req, res) => {

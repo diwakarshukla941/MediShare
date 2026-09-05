@@ -6,6 +6,7 @@ import { frameCreateSchema, frameUpdateSchema } from "../validators/frame.valida
 import { getImageKit, imagekitFolder } from "../config/imagekit.js";
 import { uploadVideoToImageKit, deleteFromImageKit } from "../utils/uploadToImageKit.js";
 import { burnFrameToTempFile } from "../utils/composeFramedVideo.js";
+import { enqueueBurn } from "../utils/burnQueue.js";
 import { AVAILABLE_VARIABLES } from "../utils/resolveVariables.js";
 
 function withMp4Ext(name) {
@@ -138,7 +139,9 @@ export const burnExistingVideos = asyncHandler(async (req, res) => {
   for (const video of videos) {
     let burnedFile;
     try {
-      burnedFile = await burnFrameToTempFile(video.videoUrl, frame, video);
+      // Same shared queue as regular downloads — a bulk re-burn shouldn't
+      // be able to run at the same time as someone else's download burn.
+      burnedFile = await enqueueBurn(() => burnFrameToTempFile(video.videoUrl, frame, video));
       // uploadVideoToImageKit streams from disk and deletes burnedFile.path
       // itself once done — no separate cleanup call needed on success.
       const uploaded = await uploadVideoToImageKit({
