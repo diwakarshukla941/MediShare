@@ -15,6 +15,15 @@ import { notFoundHandler, errorHandler } from "./middleware/error.middleware.js"
 export function createApp() {
   const app = express();
 
+  // Render (and most PaaS hosts) put the app behind a reverse proxy that
+  // sets X-Forwarded-For. Without this, express-rate-limit sees a header
+  // it doesn't trust and throws — an uncaught exception that crashes the
+  // whole process on every rate-limited request (login, uploads,
+  // downloads). Locally there's no proxy in front of the dev server, so
+  // this never shows up outside a real deployment. `1` = trust exactly
+  // one hop, matching Render's single reverse-proxy setup.
+  app.set("trust proxy", 1);
+
   app.use(helmet({ crossOriginResourcePolicy: false }));
   app.use(
     cors({
