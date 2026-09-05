@@ -113,8 +113,16 @@ async function burnFrame(inputPath, frame, video, workDir) {
         // compatible baseline every player supports.
         "-pix_fmt",
         "yuv420p",
+        // ffmpeg is a separate OS process but still counts against the same
+        // container memory limit as Node. "fast" keeps a multi-frame
+        // lookahead buffer for better compression, which costs real RAM on
+        // a small instance; "ultrafast" uses the least memory and CPU
+        // libx264 offers, at the cost of a somewhat larger output file for
+        // the same quality — worth it to stop OOM-killing the whole server.
         "-preset",
-        "fast",
+        "ultrafast",
+        "-threads",
+        "1",
         "-crf",
         "23",
         "-c:a",
