@@ -9,6 +9,15 @@ import { buildFrameOverlaySvg } from "./renderFrameSvg.js";
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 
+// Identifies a specific frame design at a specific point in time — changes
+// whenever the frame is edited (updatedAt) or a different frame is
+// activated (different _id). Used as the render-cache key so an unbaked
+// video's cached download is only ever reused while it still matches
+// exactly what's currently active.
+export function frameVersion(frame) {
+  return `${frame._id}-${new Date(frame.updatedAt).getTime()}`;
+}
+
 async function downloadToFile(url, destPath) {
   const response = await axios.get(url, { responseType: "stream", timeout: 120000 });
   const writer = createWriteStream(destPath);
@@ -19,24 +28,56 @@ async function downloadToFile(url, destPath) {
   });
 }
 
-async function fetchAsDataUri(url) {
+// Frame background/element images are whatever resolution the admin
+// happened to upload (easily several MB / thousands of pixels), but only
+// ever need to fill a box of `targetWidth` x `targetHeight`. Embedding the
+// original at full size means sharp rasterizes it, and ffmpeg composites
+// it onto every video frame, at that oversized resolution — a real memory
+// cost on a small container. Shrinking it down first (never upscaling)
+// fixes that without changing how it looks: the SVG's own
+// preserveAspectRatio still handles the actual cover/contain fit.
+async function fetchAsDataUri(url, targetWidth, targetHeight) {
   const res = await axios.get(url, { responseType: "arraybuffer", timeout: 30000 });
   const mime = res.headers["content-type"] || "image/png";
-  return `data:${mime};base64,${Buffer.from(res.data).toString("base64")}`;
+  let buffer = Buffer.from(res.data);
+
+  if (targetWidth > 0 && targetHeight > 0) {
+    try {
+      buffer = await sharp(buffer)
+        .resize(Math.ceil(targetWidth), Math.ceil(targetHeight), { fit: "inside", withoutEnlargement: true })
+        .toBuffer();
+    } catch {
+      // Not an image sharp can decode (or already small enough) — use as-is.
+    }
+  }
+
+  return `data:${mime};base64,${buffer.toString("base64")}`;
 }
 
 async function buildImageDataUriMap(frame) {
-  const urls = new Set();
-  if (frame.background?.type === "image" && frame.background.value) urls.add(frame.background.value);
+  // url -> largest box it's actually displayed in, so a background image
+  // shared with a smaller thumbnail still gets fetched at the bigger size.
+  const targets = new Map();
+  const consider = (url, width, height) => {
+    if (!url) return;
+    const existing = targets.get(url);
+    if (!existing || width * height > existing.width * existing.height) {
+      targets.set(url, { width, height });
+    }
+  };
+
+  if (frame.background?.type === "image" && frame.background.value) {
+    consider(frame.background.value, frame.width, frame.height);
+  }
   for (const el of frame.elements || []) {
-    if (el.type === "image" && el.src && !el.hidden) urls.add(el.src);
+    if (el.type === "image" && el.src && !el.hidden) consider(el.src, el.width, el.height);
   }
 
   const map = new Map();
   await Promise.all(
-    Array.from(urls).map(async (url) => {
+    Array.from(targets.entries()).map(async ([url, { width, height }]) => {
       try {
-        map.set(url, await fetchAsDataUri(url));
+        map.set(url, await fetchAsDataUri(url, width, height));
       } catch (err) {
         console.error(`Failed to fetch frame image ${url}:`, err.message);
       }
