@@ -39,6 +39,19 @@ const videoSchema = new mongoose.Schema(
     // does NOT retroactively touch it.
     frameBakedId: { type: mongoose.Schema.Types.ObjectId, ref: "Frame", default: null },
 
+    // A one-time-rendered, reusable copy for downloads of an UNBAKED video
+    // (frameBakedId null) — the first download for a given video+frame pair
+    // burns and uploads it, every download after that just redirects here
+    // instantly instead of re-burning. cachedRenderFrameVersion is
+    // `${frame._id}-${frame.updatedAt}` (see frameVersion() in
+    // composeFramedVideo.js); a mismatch (frame activated/edited since, or
+    // never rendered) means the cache is stale and getFramedDownload
+    // re-renders. Also cleared whenever the video's own fields change
+    // (updateVideo) since those can feed {{variables}} in the frame.
+    cachedRenderUrl: { type: String, default: "" },
+    cachedRenderImagekitFileId: { type: String, default: "" },
+    cachedRenderFrameVersion: { type: String, default: "" },
+
     views: { type: Number, default: 0 },
     shareCount: { type: Number, default: 0 },
     source: { type: String, enum: ["public", "dashboard", "bulk"], default: "dashboard" },

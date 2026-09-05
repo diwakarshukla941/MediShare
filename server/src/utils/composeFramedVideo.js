@@ -9,6 +9,15 @@ import { buildFrameOverlaySvg } from "./renderFrameSvg.js";
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 
+// Identifies a specific frame design at a specific point in time — changes
+// whenever the frame is edited (updatedAt) or a different frame is
+// activated (different _id). Used as the render-cache key so an unbaked
+// video's cached download is only ever reused while it still matches
+// exactly what's currently active.
+export function frameVersion(frame) {
+  return `${frame._id}-${new Date(frame.updatedAt).getTime()}`;
+}
+
 async function downloadToFile(url, destPath) {
   const response = await axios.get(url, { responseType: "stream", timeout: 120000 });
   const writer = createWriteStream(destPath);
