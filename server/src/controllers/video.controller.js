@@ -9,6 +9,7 @@ import { videoMetaSchema, videoUpdateSchema } from "../validators/video.validato
 import { detectDevice } from "../utils/detectDevice.js";
 import { getActiveFrame } from "../models/Frame.js";
 import { burnFrameToTempFile } from "../utils/composeFramedVideo.js";
+import { enqueueBurn } from "../utils/burnQueue.js";
 import { resolveContentTemplate } from "../utils/resolveContentTemplate.js";
 
 function cleanupTempFile(file) {
@@ -288,7 +289,10 @@ export const getFramedDownload = asyncHandler(async (req, res) => {
 
   let burned;
   try {
-    burned = await burnFrameToTempFile(video.videoUrl, frame, video);
+    // Queued so at most one ffmpeg burn ever runs at a time — several
+    // running together is a fast way to exceed a small container's memory,
+    // even if each one alone would have been fine.
+    burned = await enqueueBurn(() => burnFrameToTempFile(video.videoUrl, frame, video));
   } catch (err) {
     throw new ApiError(500, err.message || "Could not prepare your download");
   }
