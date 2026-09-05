@@ -5,7 +5,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { frameCreateSchema, frameUpdateSchema } from "../validators/frame.validator.js";
 import { getImageKit, imagekitFolder } from "../config/imagekit.js";
 import { uploadVideoToImageKit, deleteFromImageKit } from "../utils/uploadToImageKit.js";
-import { burnFrameFromUrl } from "../utils/composeFramedVideo.js";
+import { burnFrameToTempFile } from "../utils/composeFramedVideo.js";
 import { AVAILABLE_VARIABLES } from "../utils/resolveVariables.js";
 
 function withMp4Ext(name) {
@@ -136,10 +136,13 @@ export const burnExistingVideos = asyncHandler(async (req, res) => {
   const errors = [];
 
   for (const video of videos) {
+    let burnedFile;
     try {
-      const burnedBuffer = await burnFrameFromUrl(video.videoUrl, frame, video);
+      burnedFile = await burnFrameToTempFile(video.videoUrl, frame, video);
+      // uploadVideoToImageKit streams from disk and deletes burnedFile.path
+      // itself once done — no separate cleanup call needed on success.
       const uploaded = await uploadVideoToImageKit({
-        buffer: burnedBuffer,
+        path: burnedFile.path,
         originalname: withMp4Ext(video.fileName),
         mimetype: "video/mp4",
       });
@@ -156,6 +159,8 @@ export const burnExistingVideos = asyncHandler(async (req, res) => {
       burned.push({ id: video._id, doctorName: video.doctorName });
     } catch (err) {
       errors.push({ id: video._id, doctorName: video.doctorName, error: (err.message || "Failed").slice(0, 300) });
+    } finally {
+      await burnedFile?.cleanup();
     }
   }
 
