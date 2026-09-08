@@ -146,19 +146,23 @@ export const listVideos = asyncHandler(async (req, res) => {
   const page = Math.max(parseInt(req.query.page) || 1, 1);
   const limit = Math.min(Math.max(parseInt(req.query.limit) || 10, 1), 100);
   const search = (req.query.search || "").trim();
+  const ownership = req.query.ownership || "all";
   // Phone numbers often contain "+", which is invalid at the start of a regex
   // (PCRE throws "nothing to repeat") — escape special chars before matching.
   const searchPattern = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-  const filter = search
-    ? {
-        $or: [
-          { doctorName: { $regex: searchPattern, $options: "i" } },
-          { phone: { $regex: searchPattern, $options: "i" } },
-          { email: { $regex: searchPattern, $options: "i" } },
-        ],
-      }
-    : {};
+  const filter = {};
+  if (ownership === "mine") {
+    filter.uploadedBy = req.admin._id;
+  }
+
+  if (search) {
+    filter.$or = [
+      { doctorName: { $regex: searchPattern, $options: "i" } },
+      { phone: { $regex: searchPattern, $options: "i" } },
+      { email: { $regex: searchPattern, $options: "i" } },
+    ];
+  }
 
   const [videos, total] = await Promise.all([
     Video.find(filter)
