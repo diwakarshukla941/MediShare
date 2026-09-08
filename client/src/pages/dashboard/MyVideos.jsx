@@ -11,6 +11,7 @@ export default function MyVideos() {
   const [videos, setVideos] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
   const [search, setSearch] = useState("");
+  const [ownership, setOwnership] = useState("all");
   const [pageSize, setPageSize] = useState(10);
   // Only gates the very first load — background refreshes (pagination,
   // search, and VideoTable's own status-polling while a video is rendering)
@@ -20,12 +21,14 @@ export default function MyVideos() {
 
   const load = useCallback(
     async (page = 1) => {
-      const { data } = await api.get("/videos", { params: { page, limit: pageSize, search } });
+      const { data } = await api.get("/videos", {
+        params: { page, limit: pageSize, search, ownership },
+      });
       setVideos(data.videos);
       setPagination(data.pagination);
       setInitialLoading(false);
     },
-    [search, pageSize]
+    [search, pageSize, ownership]
   );
 
   useEffect(() => {
@@ -51,14 +54,28 @@ export default function MyVideos() {
               Bulk Upload
             </Link>
           </div>
-          <div className="relative w-full sm:max-w-xs">
-            <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              className="input pl-9"
-              placeholder="Search by name, phone, or email..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <label className="sr-only" htmlFor="video-ownership-filter">
+              Filter videos by uploader
+            </label>
+            <select
+              id="video-ownership-filter"
+              className="input !w-full sm:!w-auto"
+              value={ownership}
+              onChange={(e) => setOwnership(e.target.value)}
+            >
+              <option value="all">All videos</option>
+              <option value="mine">Uploaded by me</option>
+            </select>
+            <div className="relative w-full sm:max-w-xs">
+              <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                className="input pl-9"
+                placeholder="Search by name, phone, or email..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
           </div>
         </div>
 
