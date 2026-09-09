@@ -290,7 +290,7 @@ export default function PublicUpload() {
                     className="input"
                     required
                     disabled={!hasConsent}
-                    placeholder="e.g. Dr. Diwakar Shukla"
+                    placeholder="Diwakar Shukla"
                     value={form.doctorName}
                     onChange={update("doctorName")}
                   />
