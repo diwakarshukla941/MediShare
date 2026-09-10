@@ -11,7 +11,7 @@ import { api, getErrorMessage } from "../../../lib/api.js";
 const FRAME_STUDIO_BASE = "/dashboard/frame-studio-1845fd3e26ad";
 
 const SAMPLE_VIDEO = {
-  doctorName: "Dr. Diwakar Shukla",
+  doctorName: "Diwakar Shukla",
   degree: "MBBS",
   specialization: "General Physician",
   title: "Health Tips for Good Sleep",
