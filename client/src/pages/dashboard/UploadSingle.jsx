@@ -63,7 +63,7 @@ export default function UploadSingle() {
               <input
                 className="input"
                 required
-                placeholder="Dr. Diwakar Shukla"
+                placeholder="Diwakar Shukla"
                 value={form.doctorName}
                 onChange={update("doctorName")}
               />
