@@ -288,7 +288,6 @@ function BurnExistingVideosPanel({ frames }) {
                 <input type="checkbox" checked={selected.has(v._id)} onChange={() => toggleOne(v._id)} />
                 <span className="flex-1 truncate">
                   <span className="font-medium text-slate-800">{v.doctorName}</span>{" "}
-                  <span className="text-slate-400">· {v.email}</span>
                 </span>
                 <span className="shrink-0 text-xs text-slate-400">{formatBytes(v.fileSize)}</span>
               </label>

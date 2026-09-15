@@ -5,7 +5,7 @@ import { Admin } from "../models/Admin.js";
 import { Role } from "../models/Role.js";
 
 const DEFAULT_ROLE_NAME = "Admin (Full Access)";
-const DEFAULT_PERMISSIONS = ["videos:view", "videos:upload", "videos:bulk_upload", "analytics:view"];
+const DEFAULT_PERMISSIONS = ["videos:view", "videos:upload", "analytics:view"];
 
 async function migrate() {
   await connectDB();

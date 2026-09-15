@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Copy, Share2, Pencil, Trash2, Eye, Download, Loader2, Phone, Mail } from "lucide-react";
+import { Copy, Share2, Pencil, Trash2, Eye, Download, Loader2, Phone } from "lucide-react";
 import toast from "react-hot-toast";
 import { api, getErrorMessage } from "../lib/api.js";
 import { downloadFramedVideo, getDownloadErrorMessage } from "../lib/downloadVideo.js";
@@ -99,16 +99,13 @@ export default function VideoTable({ videos, onChanged, compact = false }) {
                   <p className="truncate font-semibold text-slate-900">{video.doctorName}</p>
                   <p className="mt-0.5 truncate text-xs text-slate-500">
                     {video.degree}
+                    {video.designation ? ` · ${video.designation}` : ""}
                     {video.specialization ? ` · ${video.specialization}` : ""}
                   </p>
                   <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500">
                     <span className="inline-flex items-center gap-1">
                       <Phone size={11} className="text-slate-400" />
                       {video.phone}
-                    </span>
-                    <span className="inline-flex items-center gap-1 truncate">
-                      <Mail size={11} className="text-slate-400" />
-                      {video.email}
                     </span>
                   </p>
                 </td>
@@ -124,7 +121,6 @@ export default function VideoTable({ videos, onChanged, compact = false }) {
                     {video.uploadedByName ? (
                       <>
                         <p className="truncate text-xs font-medium text-slate-700">{video.uploadedByName}</p>
-                        <p className="truncate text-xs text-slate-400">{video.uploadedByEmail}</p>
                         {video.uploadedByLocation && (
                           <p className="truncate text-xs text-slate-400">{video.uploadedByLocation}</p>
                         )}

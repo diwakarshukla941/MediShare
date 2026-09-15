@@ -304,7 +304,6 @@ export default function Analytics() {
                         <td className="max-w-[220px] px-5 py-3">
                           <p className="truncate font-medium text-slate-900">{v.doctorName}</p>
                           <p className="truncate text-xs text-slate-500">
-                            {v.email}
                             {v.phone ? ` · ${v.phone}` : ""}
                           </p>
                         </td>

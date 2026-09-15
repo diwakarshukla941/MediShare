@@ -18,10 +18,10 @@ import { api, getErrorMessage } from "../lib/api.js";
 const initialForm = {
   doctorName: "",
   degree: "",
+  designation: "",
   specialization: "",
   organizationName: "",
   phone: "",
-  email: "",
 };
 
 export default function PublicUpload() {
@@ -347,21 +347,15 @@ export default function PublicUpload() {
                   />
                 </div>
 
-                {/* Email */}
-
                 <div>
-                  <label className="label">
-                    Email
-                  </label>
+                  <label className="label">Designation (Optional)</label>
 
                   <input
                     className="input"
-                    type="email"
-                    required
                     disabled={!hasConsent}
-                    placeholder="e.g. doctor@clinic.com"
-                    value={form.email}
-                    onChange={update("email")}
+                    placeholder="e.g. Consultant"
+                    value={form.designation}
+                    onChange={update("designation")}
                   />
                 </div>
 

@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import RequirePermission from "./components/RequirePermission.jsx";
+import RequireSuperAdmin from "./components/RequireSuperAdmin.jsx";
 
 import PublicUpload from "./pages/PublicUpload.jsx";
 import WatchVideo from "./pages/WatchVideo.jsx";
@@ -58,9 +59,9 @@ export default function App() {
           <Route
             path="bulk-upload"
             element={
-              <RequirePermission permission="videos:bulk_upload">
+              <RequireSuperAdmin>
                 <BulkUpload />
-              </RequirePermission>
+              </RequireSuperAdmin>
             }
           />
           {/* Unlisted URL for non-super-admins; only super_admin grants this permission to anyone */}

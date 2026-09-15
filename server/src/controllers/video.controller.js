@@ -1,4 +1,5 @@
 import fs from "fs";
+import * as XLSX from "xlsx";
 import { parseSheetFile } from "../utils/parseSheetFile.js";
 import { Video } from "../models/Video.js";
 import { AnalyticsEvent } from "../models/AnalyticsEvent.js";
@@ -24,7 +25,7 @@ export const createVideo = asyncHandler(async (req, res) => {
   const meta = videoMetaSchema.parse(req.body);
   const [uploaded, content] = await Promise.all([
     uploadVideoToImageKit(req.file),
-    resolveContentTemplate(meta.email),
+    resolveContentTemplate(),
   ]);
 
   const video = await Video.create({
@@ -88,10 +89,10 @@ export const bulkCreateVideos = asyncHandler(async (req, res) => {
     const parsedMeta = videoMetaSchema.safeParse({
       doctorName: row.doctorname,
       degree: row.degree,
+      designation: row.designation,
       specialization: row.specialization,
       organizationName: row.organizationname,
       phone: row.phone,
-      email: row.email,
     });
 
     if (!parsedMeta.success) {
@@ -106,7 +107,7 @@ export const bulkCreateVideos = asyncHandler(async (req, res) => {
     try {
       const [uploaded, content] = await Promise.all([
         uploadVideoToImageKit(file),
-        resolveContentTemplate(parsedMeta.data.email),
+        resolveContentTemplate(),
       ]);
       const video = await Video.create({
         ...parsedMeta.data,
@@ -133,13 +134,37 @@ export const bulkCreateVideos = asyncHandler(async (req, res) => {
 
 export const getSampleCsv = asyncHandler(async (req, res) => {
   const csv = [
-    "fileName,doctorName,degree,specialization,phone,email,organizationName",
-    "sleep-tips.mp4,Dr. Diwakar Shukla,MBBS,General Physician,+91 12345 67890,diwakar@medicare.example,MediCare Clinic",
+    "fileName,doctorName,degree,designation,specialization,phone,organizationName",
+    "sleep-tips.mp4,Dr. Diwakar Shukla,MBBS,Consultant,General Physician,+91 12345 67890,MediCare Clinic",
   ].join("\n");
 
   res.setHeader("Content-Type", "text/csv");
   res.setHeader("Content-Disposition", "attachment; filename=medishare-bulk-upload-sample.csv");
   res.send(csv);
+});
+
+export const exportVideos = asyncHandler(async (req, res) => {
+  const videos = await Video.find()
+    .sort({ createdAt: -1 })
+    .select("doctorName degree designation phone slug uploadedByName");
+  const clientUrl = (process.env.CLIENT_URL || `${req.protocol}://${req.get("host")}`).replace(/\/$/, "");
+  const rows = videos.map((video) => ({
+    "Doctor Name": video.doctorName,
+    Degree: video.degree,
+    Designation: video.designation || "",
+    "Mobile Number": video.phone,
+    "Video Link": `${clientUrl}/watch/${video.slug}`,
+    "Uploaded By": video.uploadedByName || "Public link",
+  }));
+
+  const workbook = XLSX.utils.book_new();
+  const sheet = XLSX.utils.json_to_sheet(rows);
+  XLSX.utils.book_append_sheet(workbook, sheet, "My Videos");
+  const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", "attachment; filename=medishare-videos.xlsx");
+  res.send(buffer);
 });
 
 export const listVideos = asyncHandler(async (req, res) => {
@@ -160,7 +185,6 @@ export const listVideos = asyncHandler(async (req, res) => {
     filter.$or = [
       { doctorName: { $regex: searchPattern, $options: "i" } },
       { phone: { $regex: searchPattern, $options: "i" } },
-      { email: { $regex: searchPattern, $options: "i" } },
     ];
   }
 
