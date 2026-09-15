@@ -4,7 +4,6 @@
 export const PERMISSION_LABELS = {
   "videos:view": "My Videos",
   "videos:upload": "Upload Video",
-  "videos:bulk_upload": "Bulk Upload",
   "analytics:view": "Analytics",
   "frames:manage": "Frame Studio",
   "content_templates:manage": "Content Templates",

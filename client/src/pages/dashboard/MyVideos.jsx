@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Search, UploadCloud, Layers, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, UploadCloud, ChevronLeft, ChevronRight, FileSpreadsheet } from "lucide-react";
 import Topbar from "../../components/dashboard/Topbar.jsx";
 import VideoTable from "../../components/VideoTable.jsx";
 import { api } from "../../lib/api.js";
+import { downloadVideosSpreadsheet } from "../../lib/downloadVideo.js";
 
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50, 100];
 
@@ -18,6 +19,7 @@ export default function MyVideos() {
   // update `videos` in place instead of unmounting the table, so the list
   // doesn't flash/blink every few seconds while something is processing.
   const [initialLoading, setInitialLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
 
   const load = useCallback(
     async (page = 1) => {
@@ -38,6 +40,15 @@ export default function MyVideos() {
 
   const handleChanged = useCallback(() => load(pagination.page), [load, pagination.page]);
 
+  const exportSpreadsheet = async () => {
+    setExporting(true);
+    try {
+      await downloadVideosSpreadsheet();
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div>
       <Topbar title="My Videos" subtitle={`${pagination.total} video${pagination.total === 1 ? "" : "s"} in your library`} />
@@ -49,10 +60,10 @@ export default function MyVideos() {
               <UploadCloud size={16} />
               Upload Video
             </Link>
-            <Link to="/dashboard/bulk-upload" className="btn-secondary">
-              <Layers size={16} />
-              Bulk Upload
-            </Link>
+            <button type="button" onClick={exportSpreadsheet} className="btn-secondary" disabled={exporting}>
+              <FileSpreadsheet size={16} />
+              {exporting ? "Preparing..." : "Download Excel"}
+            </button>
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
             <label className="sr-only" htmlFor="video-ownership-filter">
@@ -71,7 +82,7 @@ export default function MyVideos() {
               <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 className="input pl-9"
-                placeholder="Search by name, phone, or email..."
+                placeholder="Search by name or phone..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />

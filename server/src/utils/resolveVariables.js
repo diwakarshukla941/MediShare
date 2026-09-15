@@ -6,7 +6,6 @@ export const AVAILABLE_VARIABLES = [
   { key: "description", label: "Description" },
   { key: "organizationName", label: "Organization Name" },
   { key: "phone", label: "Phone" },
-  { key: "email", label: "Email" },
 ];
 
 export function resolveVariables(content, video) {

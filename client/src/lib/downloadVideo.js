@@ -17,6 +17,18 @@ export async function downloadFramedVideo(videoId, filename) {
   URL.revokeObjectURL(url);
 }
 
+export async function downloadVideosSpreadsheet() {
+  const response = await api.get("/videos/export", { responseType: "blob" });
+  const url = URL.createObjectURL(response.data);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "medishare-videos.xlsx";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 // With responseType: "blob", axios hands back a Blob even for error
 // responses — getErrorMessage's `err.response.data.message` lookup can't
 // see inside it, so unwrap the JSON ourselves when that's what came back.

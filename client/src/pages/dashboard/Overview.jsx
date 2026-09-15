@@ -15,7 +15,7 @@ export default function Overview() {
   const { admin } = useAuth();
   const canViewVideos = hasPermission(admin, "videos:view");
   const canUpload = hasPermission(admin, "videos:upload");
-  const canBulkUpload = hasPermission(admin, "videos:bulk_upload");
+  const canBulkUpload = admin?.role === "super_admin";
 
   const [stats, setStats] = useState(null);
   const [recent, setRecent] = useState([]);

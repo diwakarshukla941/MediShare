@@ -8,10 +8,10 @@ import { api, getErrorMessage } from "../../lib/api.js";
 const initialForm = {
   doctorName: "",
   degree: "",
+  designation: "",
   specialization: "",
   organizationName: "",
   phone: "",
-  email: "",
 };
 
 export default function UploadSingle() {
@@ -93,14 +93,12 @@ export default function UploadSingle() {
               />
             </div>
             <div>
-              <label className="label">Email</label>
+              <label className="label">Designation</label>
               <input
                 className="input"
-                type="email"
-                required
-                placeholder="doctor@clinic.com"
-                value={form.email}
-                onChange={update("email")}
+                placeholder="Consultant"
+                value={form.designation}
+                onChange={update("designation")}
               />
             </div>
             <div>
