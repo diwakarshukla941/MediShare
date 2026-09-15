@@ -24,7 +24,7 @@ const links = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, end: true, permission: null },
   { to: "/dashboard/videos", label: "My Videos", icon: Video, permission: "videos:view" },
   { to: "/dashboard/upload", label: "Upload Video", icon: UploadCloud, permission: "videos:upload" },
-  { to: "/dashboard/bulk-upload", label: "Bulk Upload", icon: Layers, permission: "videos:bulk_upload" },
+  { to: "/dashboard/bulk-upload", label: "Bulk Upload", icon: Layers, superAdminOnly: true },
   { to: "/dashboard/analytics", label: "Analytics", icon: BarChart3, permission: "analytics:view" },
   { to: FRAME_STUDIO_BASE, label: "Frame Studio", icon: Wand2, permission: "frames:manage" },
   {
@@ -48,7 +48,9 @@ export default function Sidebar({ open, onClose }) {
   const { logout, admin } = useAuth();
   const appEnv = import.meta.env.VITE_APP_ENV || "development";
   const badge = ENV_BADGE[appEnv];
-  const navLinks = links.filter((l) => !l.permission || hasPermission(admin, l.permission));
+  const navLinks = links.filter(
+    (l) => (!l.permission || hasPermission(admin, l.permission)) && (!l.superAdminOnly || admin?.role === "super_admin")
+  );
 
   return (
     <>

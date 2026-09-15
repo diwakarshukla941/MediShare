@@ -8,6 +8,7 @@ import {
   LockKeyhole,
   ArrowRight,
 } from "lucide-react";
+import { brand } from "../config/brand.js";
 
 export default function ConsentModal({ onAgree, onClose }) {
   const [agreed, setAgreed] = useState(false);
@@ -266,7 +267,7 @@ export default function ConsentModal({ onAgree, onClose }) {
                 lg:text-xs
               "
             >
-              At MediShare, your expertise helps educate and empower
+              At {brand.name}, your expertise helps educate and empower
               patients with reliable medical information.
             </p>
           </div>
@@ -596,7 +597,7 @@ export default function ConsentModal({ onAgree, onClose }) {
                 "
               >
                 I consent to recording and using my video for patient
-                education purposes through MediShare.
+                education purposes through {brand.name}.
               </span>
             </label>
 
@@ -614,7 +615,7 @@ export default function ConsentModal({ onAgree, onClose }) {
             >
               I confirm that I have the necessary rights and permissions
               to share this content and understand that my video may be
-              stored, processed, and made available on MediShare for
+              stored, processed, and made available on {brand.name} for
               educational use.
             </p>
           </div>

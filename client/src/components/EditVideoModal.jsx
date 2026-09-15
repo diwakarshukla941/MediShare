@@ -7,12 +7,12 @@ export default function EditVideoModal({ video, onClose, onSaved }) {
   const [form, setForm] = useState({
     doctorName: video.doctorName || "",
     degree: video.degree || "",
+    designation: video.designation || "",
     specialization: video.specialization || "",
     organizationName: video.organizationName || "",
     title: video.title || "",
     description: video.description || "",
     phone: video.phone || "",
-    email: video.email || "",
   });
   const [saving, setSaving] = useState(false);
 
@@ -55,16 +55,16 @@ export default function EditVideoModal({ video, onClose, onSaved }) {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="label">Specialization</label>
-              <input className="input" value={form.specialization} onChange={update("specialization")} />
+              <label className="label">Designation</label>
+              <input className="input" value={form.designation} onChange={update("designation")} />
             </div>
             <div>
               <label className="label">Phone</label>
               <input className="input" value={form.phone} onChange={update("phone")} required />
             </div>
             <div>
-              <label className="label">Email</label>
-              <input className="input" type="email" value={form.email} onChange={update("email")} required />
+              <label className="label">Specialization</label>
+              <input className="input" value={form.specialization} onChange={update("specialization")} />
             </div>
             <div>
               <label className="label">Organization Name</label>

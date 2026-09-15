@@ -3,6 +3,7 @@ import {
   createVideo,
   bulkCreateVideos,
   getSampleCsv,
+  exportVideos,
   listVideos,
   getPublicVideo,
   updateVideo,
@@ -13,7 +14,7 @@ import {
   getFramedDownload,
   getVideo,
 } from "../controllers/video.controller.js";
-import { requireAuth, optionalAuth, requirePermission } from "../middleware/auth.middleware.js";
+import { requireAuth, optionalAuth, requirePermission, requireSuperAdmin } from "../middleware/auth.middleware.js";
 import { uploadSingleVideo, uploadBulk } from "../middleware/upload.middleware.js";
 import { publicUploadLimiter, trackLimiter, downloadLimiter } from "../middleware/rateLimiter.js";
 
@@ -28,11 +29,12 @@ router.post("/:id/share", incrementShare);
 router.post("/:id/track-watch", trackLimiter, trackWatch);
 router.get("/:id/download", downloadLimiter, getFramedDownload);
 router.get("/stats", requireAuth, requirePermission("videos:view"), getStats);
-router.get("/sample-csv", requireAuth, requirePermission("videos:bulk_upload"), getSampleCsv);
+router.get("/sample-csv", requireAuth, requireSuperAdmin, getSampleCsv);
+router.get("/export", requireAuth, requirePermission("videos:view"), exportVideos);
 
 // Dashboard (auth required)
 router.get("/", requireAuth, requirePermission("videos:view"), listVideos);
-router.post("/bulk", requireAuth, requirePermission("videos:bulk_upload"), uploadBulk, bulkCreateVideos);
+router.post("/bulk", requireAuth, requireSuperAdmin, uploadBulk, bulkCreateVideos);
 router.get("/:id", requireAuth, requirePermission("videos:view"), getVideo);
 router.patch("/:id", requireAuth, requirePermission("videos:view"), updateVideo);
 router.delete("/:id", requireAuth, requirePermission("videos:view"), deleteVideo);

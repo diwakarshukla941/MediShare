@@ -112,7 +112,7 @@ export const activateFrame = asyncHandler(async (req, res) => {
 // source left (see Video.frameBakedId) and is permanently excluded.
 export const listUnbakedVideos = asyncHandler(async (req, res) => {
   const videos = await Video.find({ frameBakedId: null })
-    .select("doctorName email phone fileSize createdAt")
+    .select("doctorName designation phone fileSize createdAt")
     .sort({ createdAt: -1 });
   res.json({ videos });
 });

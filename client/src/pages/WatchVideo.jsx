@@ -9,6 +9,7 @@ import VideoControls from "../components/VideoControls.jsx";
 import { api } from "../lib/api.js";
 import { getSessionId, sendWatchBeacon } from "../lib/session.js";
 import { downloadFramedVideo, getDownloadErrorMessage } from "../lib/downloadVideo.js";
+import { brand } from "../config/brand.js";
 
 const WATCH_BEACON_INTERVAL_MS = 20000;
 
@@ -187,7 +188,7 @@ export default function WatchVideo() {
 
         <div className="mt-10 flex items-center justify-center gap-1.5 text-xs text-slate-400">
           <Play size={12} fill="currentColor" />
-          Powered by MediShare
+          Powered by {brand.name}
         </div>
       </main>
     </div>

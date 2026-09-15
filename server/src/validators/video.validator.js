@@ -6,10 +6,10 @@ import { z } from "zod";
 export const videoMetaSchema = z.object({
   doctorName: z.string().trim().min(2, "Doctor name is required"),
   degree: z.string().trim().min(2, "Degree is required (e.g. MBBS, BHMS)"),
+  designation: z.string().trim().optional().default(""),
   specialization: z.string().trim().optional().default(""),
   organizationName: z.string().trim().optional().default(""),
   phone: z.string().trim().min(1, "Phone number is required"),
-  email: z.string().trim().toLowerCase().email("Enter a valid email"),
 });
 
 // What the dashboard's Edit Video modal can change — everything above, plus

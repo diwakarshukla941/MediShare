@@ -5,14 +5,11 @@ const videoSchema = new mongoose.Schema(
   {
     doctorName: { type: String, required: true, trim: true },
     degree: { type: String, required: true, trim: true },
+    designation: { type: String, trim: true, default: "" },
     specialization: { type: String, trim: true, default: "" },
     organizationName: { type: String, trim: true, default: "" },
     phone: { type: String, required: true, trim: true },
-    email: { type: String, required: true, trim: true, lowercase: true },
-    // Populated automatically at upload time from a ContentTemplate match
-    // (by doctor email, falling back to the admin's default) — see
-    // server/src/utils/resolveContentTemplate.js. Still a plain editable
-    // field afterward (EditVideoModal can override per video).
+    // Populated automatically at upload time from the global ContentTemplate.
     title: { type: String, trim: true, default: "" },
     description: { type: String, trim: true, default: "" },
 
@@ -63,9 +60,17 @@ const videoSchema = new mongoose.Schema(
     uploadedByEmail: { type: String, trim: true, default: "" },
     uploadedByLocation: { type: String, trim: true, default: "" },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    toJSON: {
+      transform: (_doc, value) => {
+        delete value.email;
+        return value;
+      },
+    },
+  }
 );
 
-videoSchema.index({ doctorName: "text", title: "text", specialization: "text", email: "text" });
+videoSchema.index({ doctorName: "text", title: "text", specialization: "text", designation: "text" });
 
 export const Video = mongoose.model("Video", videoSchema);

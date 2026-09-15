@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "concurrently -n server,client -c blue,magenta \"npm run dev -w server\" \"npm run dev -w client\"",
     "seed": "npm run seed -w server",
+    "cleanup:doctor-emails": "npm run cleanup:doctor-emails -w server",
     "build": "npm run build -w client",
     "lint": "npm run lint -w client"
   },
