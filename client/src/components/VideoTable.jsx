@@ -10,11 +10,13 @@ function formatDate(d) {
   return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-export default function VideoTable({ videos, onChanged, compact = false }) {
+export default function VideoTable({ videos, onChanged, compact = false, selectable = false }) {
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [busy, setBusy] = useState(false);
   const [downloadingId, setDownloadingId] = useState(null);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [deletingSelected, setDeletingSelected] = useState(false);
   const isProcessing = (video) => video.renderingStatus === "processing";
 
   useEffect(() => {
@@ -22,6 +24,8 @@ export default function VideoTable({ videos, onChanged, compact = false }) {
     const interval = setInterval(onChanged, 5000);
     return () => clearInterval(interval);
   }, [videos, onChanged]);
+
+  useEffect(() => setSelectedIds((current) => new Set([...current].filter((id) => videos.some((video) => video._id === id)))), [videos]);
 
   const downloadFramed = async (video) => {
     setDownloadingId(video._id);
@@ -76,6 +80,20 @@ export default function VideoTable({ videos, onChanged, compact = false }) {
     }
   };
 
+  const toggleSelected = (id) => setSelectedIds((current) => {
+    const next = new Set(current);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const toggleAll = () => setSelectedIds((current) => current.size === videos.length ? new Set() : new Set(videos.map((video) => video._id)));
+  const confirmSelectedDelete = async () => {
+    setBusy(true);
+    try {
+      const { data } = await api.delete("/videos/bulk", { data: { ids: [...selectedIds] } });
+      toast.success(data.message); setSelectedIds(new Set()); setDeletingSelected(false); onChanged();
+    } catch (err) { toast.error(getErrorMessage(err)); } finally { setBusy(false); }
+  };
+
   if (videos.length === 0) {
     return (
       <div className="card flex flex-col items-center justify-center px-6 py-16 text-center">
@@ -87,10 +105,17 @@ export default function VideoTable({ videos, onChanged, compact = false }) {
 
   return (
     <div className="card overflow-hidden">
+      {selectable && selectedIds.size > 0 && (
+        <div className="flex items-center justify-between border-b border-red-100 bg-red-50 px-5 py-3">
+          <span className="text-sm font-medium text-red-800">{selectedIds.size} video{selectedIds.size === 1 ? "" : "s"} selected</span>
+          <button className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-red-700" onClick={() => setDeletingSelected(true)}><Trash2 size={15} />Delete selected</button>
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-slate-100 bg-slate-50/60 text-xs uppercase tracking-wide text-slate-500">
             <tr>
+              {selectable && <th className="w-10 px-4 py-3"><input aria-label="Select all videos on this page" type="checkbox" checked={videos.length > 0 && selectedIds.size === videos.length} onChange={toggleAll} /></th>}
               <th className="px-5 py-3 font-medium">Doctor &amp; Contact</th>
               <th className="px-5 py-3 font-medium">Views</th>
               {!compact && <th className="px-5 py-3 font-medium">Shares</th>}
@@ -102,6 +127,7 @@ export default function VideoTable({ videos, onChanged, compact = false }) {
           <tbody className="divide-y divide-slate-100">
             {videos.map((video) => (
               <tr key={video._id} className="transition hover:bg-slate-50/60">
+                {selectable && <td className="px-4 py-3.5"><input aria-label={`Select ${video.doctorName}`} type="checkbox" checked={selectedIds.has(video._id)} onChange={() => toggleSelected(video._id)} /></td>}
                 <td className="max-w-xs px-5 py-3.5">
                   <p className="truncate font-semibold text-slate-900">{video.doctorName}</p>
                   <p className="mt-0.5 truncate text-xs text-slate-500">
@@ -220,6 +246,14 @@ export default function VideoTable({ videos, onChanged, compact = false }) {
         message={`"${deleting?.doctorName}" will be permanently removed and its link will stop working.`}
         onConfirm={confirmDelete}
         onCancel={() => setDeleting(null)}
+        loading={busy}
+      />
+      <ConfirmDialog
+        open={deletingSelected}
+        title={`Delete ${selectedIds.size} selected video${selectedIds.size === 1 ? "" : "s"}?`}
+        message="This permanently removes the selected videos, their uploaded files, and their analytics. Their public links will stop working."
+        onConfirm={confirmSelectedDelete}
+        onCancel={() => setDeletingSelected(false)}
         loading={busy}
       />
     </div>
