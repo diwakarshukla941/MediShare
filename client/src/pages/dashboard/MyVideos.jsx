@@ -5,10 +5,12 @@ import Topbar from "../../components/dashboard/Topbar.jsx";
 import VideoTable from "../../components/VideoTable.jsx";
 import { api } from "../../lib/api.js";
 import { downloadVideosSpreadsheet } from "../../lib/downloadVideo.js";
+import { useAuth } from "../../context/AuthContext.jsx";
 
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50, 100];
 
 export default function MyVideos() {
+  const { admin } = useAuth();
   const [videos, setVideos] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
   const [search, setSearch] = useState("");
@@ -90,7 +92,7 @@ export default function MyVideos() {
           </div>
         </div>
 
-        {!initialLoading && <VideoTable videos={videos} onChanged={handleChanged} />}
+        {!initialLoading && <VideoTable videos={videos} onChanged={handleChanged} selectable={admin?.role === "super_admin"} />}
 
         {!initialLoading && pagination.total > 0 && (
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">

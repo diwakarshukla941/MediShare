@@ -16,10 +16,16 @@ export async function uploadVideoToImageKit(file) {
       folder: imagekitFolder("videos"),
       useUniqueFileName: true,
     });
+    // Use ImageKit's original-file delivery path for FFmpeg. The optimized
+    // video endpoint consumes ImageKit video-transformation quota and can
+    // return 403 when that quota is exhausted; tr:orig-true avoids it.
+    const details = await imagekit.getFileDetails(result.fileId);
+    const endpoint = process.env.IMAGEKIT_URL_ENDPOINT.replace(/\/$/, "");
+    const originalUrl = details.filePath ? `${endpoint}/tr:orig-true${details.filePath}` : details.url || result.url;
 
     return {
-      url: result.url,
-      thumbnailUrl: result.thumbnailUrl || "",
+      url: originalUrl,
+      thumbnailUrl: details.thumbnail || result.thumbnailUrl || "",
       fileId: result.fileId,
       name: result.name,
       size: result.size || file.size,

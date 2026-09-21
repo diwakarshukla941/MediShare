@@ -10,6 +10,8 @@ import frameRoutes from "./routes/frame.routes.js";
 import contentTemplateRoutes from "./routes/contentTemplate.routes.js";
 import adminUserRoutes from "./routes/adminUser.routes.js";
 import roleRoutes from "./routes/role.routes.js";
+import zoneRoutes from "./routes/zone.routes.js";
+import storageConfigRoutes from "./routes/storageConfig.routes.js";
 import { notFoundHandler, errorHandler } from "./middleware/error.middleware.js";
 
 export function createApp() {
@@ -46,6 +48,8 @@ export function createApp() {
   app.use("/api/content-templates", contentTemplateRoutes);
   app.use("/api/admins", adminUserRoutes);
   app.use("/api/roles", roleRoutes);
+  app.use("/api/zones", zoneRoutes);
+  app.use("/api/storage-config", storageConfigRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
