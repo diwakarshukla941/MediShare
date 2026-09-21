@@ -1,10 +1,10 @@
 export const AVAILABLE_VARIABLES = [
   { key: "doctorName", label: "Doctor Name" },
-  { key: "degree", label: "Degree" },
-  { key: "specialization", label: "Specialization" },
+  { key: "credentials", label: "Credentials" },
+  { key: "empId", label: "Employee ID" },
   { key: "title", label: "Video Title" },
   { key: "description", label: "Description" },
-  { key: "organizationName", label: "Organization Name" },
+  { key: "zone", label: "Zone" },
   { key: "phone", label: "Phone" },
 ];
 

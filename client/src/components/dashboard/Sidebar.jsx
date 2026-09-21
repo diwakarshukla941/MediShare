@@ -11,6 +11,8 @@ import {
   Wand2,
   FileText,
   Users,
+  MapPin,
+  HardDrive,
 } from "lucide-react";
 import Logo from "../Logo.jsx";
 import { useAuth } from "../../context/AuthContext.jsx";
@@ -35,6 +37,8 @@ const links = [
   },
   { to: "/dashboard/settings", label: "Settings", icon: Settings, permission: null },
   { to: "/dashboard/team", label: "Team & Access", icon: Users, permission: "team:manage" },
+  { to: "/dashboard/zones", label: "Zones", icon: MapPin, superAdminOnly: true },
+  { to: "/dashboard/storage", label: "Storage & CDN", icon: HardDrive, superAdminOnly: true },
 ];
 
 const ENV_BADGE = {

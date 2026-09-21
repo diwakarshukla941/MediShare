@@ -9,6 +9,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { brand } from "../config/brand.js";
+import Logo from "./Logo.jsx";
 
 export default function ConsentModal({ onAgree, onClose }) {
   const [agreed, setAgreed] = useState(false);
@@ -127,53 +128,8 @@ export default function ConsentModal({ onAgree, onClose }) {
             "
           >
             <div className="flex items-center gap-2.5">
-              <div
-                className="
-                  flex
-                  h-9
-                  w-9
-                  shrink-0
-                  items-center
-                  justify-center
-                  rounded-lg
-                  bg-brand-600
-                  text-white
-
-                  sm:h-10
-                  sm:w-10
-                "
-              >
-                <svg
-                  width="19"
-                  height="19"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M8 5L19 12L8 19V5Z"
-                    fill="currentColor"
-                  />
-                </svg>
-              </div>
-
               <div>
-                <h2
-                  className="
-                    text-lg
-                    font-bold
-                    leading-none
-                    text-slate-900
-
-                    sm:text-xl
-                  "
-                >
-                  Medi<span className="text-brand-600">Share</span>
-                </h2>
-
-                <p className="mt-1 text-[8px] text-slate-400 sm:text-[9px]">
-                  Knowledge today. Healthier tomorrow.
-                </p>
+                <Logo />
               </div>
             </div>
           </div>

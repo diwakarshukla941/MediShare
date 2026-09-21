@@ -5,10 +5,9 @@ import { z } from "zod";
 // from ContentTemplate (see resolveContentTemplate.js), not typed per-video.
 export const videoMetaSchema = z.object({
   doctorName: z.string().trim().min(2, "Doctor name is required"),
-  degree: z.string().trim().min(2, "Degree is required (e.g. MBBS, BHMS)"),
-  designation: z.string().trim().optional().default(""),
-  specialization: z.string().trim().optional().default(""),
-  organizationName: z.string().trim().optional().default(""),
+  credentials: z.string().trim().min(2, "Credentials are required (e.g. MBBS, BHMS)"),
+  empId: z.string().trim().min(1, "Employee ID is required"),
+  zone: z.string().trim().min(1, "Zone is required"),
   phone: z.string().trim().min(1, "Phone number is required"),
 });
 

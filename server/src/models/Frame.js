@@ -10,6 +10,7 @@ const frameSchema = new mongoose.Schema(
       type: { type: String, enum: ["color", "image"], default: "color" },
       value: { type: String, default: "#eef2ff" },
       imagekitFileId: { type: String, default: "" },
+      storageProvider: { type: String, default: "imagekit" },
     },
     // Element shape varies by type (text/image/video/rect/circle/line) — validated
     // at the API boundary via zod (server/src/validators/frame.validator.js), not here.

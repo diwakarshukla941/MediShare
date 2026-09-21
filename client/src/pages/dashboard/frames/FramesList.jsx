@@ -12,11 +12,11 @@ const FRAME_STUDIO_BASE = "/dashboard/frame-studio-1845fd3e26ad";
 
 const SAMPLE_VIDEO = {
   doctorName: "Diwakar Shukla",
-  degree: "MBBS",
-  specialization: "General Physician",
+  credentials: "MBBS",
+  empId: "EMP-001",
   title: "Health Tips for Good Sleep",
   description: "Simple tips for better sleep",
-  organizationName: "MediCare Clinic",
+  zone: "Mumbai",
 };
 
 export default function FramesList() {
