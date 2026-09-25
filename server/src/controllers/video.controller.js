@@ -379,8 +379,6 @@ export const getFramedDownload = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Video not found");
   }
 
-  return res.redirect(`${video.videoUrl}?ik-attachment=true`);
-
   if (video.frameBakedId) {
     return res.redirect(`${video.videoUrl}?ik-attachment=true`);
   }
