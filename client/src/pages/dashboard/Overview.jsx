@@ -19,10 +19,7 @@ export default function Overview() {
 
   const [stats, setStats] = useState(null);
   const [recent, setRecent] = useState([]);
-  // Only gates the very first load — background refreshes (triggered by
-  // VideoTable's own status-polling while a video is rendering) update
-  // state in place instead of unmounting things, so the page doesn't
-  // flash/blink every few seconds while something is processing.
+  // Only gates the very first load so later updates do not flash the page.
   const [initialLoading, setInitialLoading] = useState(canViewVideos);
 
   const load = useCallback(async () => {

@@ -16,10 +16,7 @@ export default function MyVideos() {
   const [search, setSearch] = useState("");
   const [ownership, setOwnership] = useState("all");
   const [pageSize, setPageSize] = useState(10);
-  // Only gates the very first load — background refreshes (pagination,
-  // search, and VideoTable's own status-polling while a video is rendering)
-  // update `videos` in place instead of unmounting the table, so the list
-  // doesn't flash/blink every few seconds while something is processing.
+  // Only gates the very first load; later updates keep the table in place.
   const [initialLoading, setInitialLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
 
