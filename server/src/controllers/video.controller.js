@@ -6,7 +6,7 @@ import { Zone } from "../models/Zone.js";
 import { AnalyticsEvent } from "../models/AnalyticsEvent.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { uploadVideo, deleteStoredFile } from "../storage/provider.js";
+import { uploadVideo, deleteStoredFile, getRenderableUrl } from "../storage/provider.js";
 import { videoMetaSchema, videoUpdateSchema } from "../validators/video.validator.js";
 import { detectDevice } from "../utils/detectDevice.js";
 import { getActiveFrame } from "../models/Frame.js";
@@ -22,12 +22,57 @@ async function assertValidZone(zone) {
   if (!(await Zone.exists({ name: zone }))) throw new ApiError(400, "Select a valid zone from the list");
 }
 
+async function burnActiveFrameOnSave(video) {
+  const frame = await getActiveFrame();
+  if (!frame) {
+    video.renderingStatus = "completed";
+    await video.save();
+    return video;
+  }
+
+  let burned;
+  try {
+    burned = await enqueueBurn(async () => burnFrameToTempFile(await getRenderableUrl(video.sourceVideoUrl || video.videoUrl, video.sourceFileId || video.imagekitFileId, video.sourceStorageProvider || video.storageProvider), frame, video));
+    const uploaded = await uploadVideo({
+      path: burned.path,
+      originalname: `${video.slug}-framed.mp4`,
+      mimetype: "video/mp4",
+    });
+    const previousBakedFileId = video.imagekitFileId;
+    video.videoUrl = uploaded.url;
+    video.thumbnailUrl = uploaded.thumbnailUrl || video.thumbnailUrl;
+    video.imagekitFileId = uploaded.fileId;
+    video.storageProvider = uploaded.provider;
+    video.fileName = uploaded.name;
+    video.fileSize = uploaded.size;
+    video.frameBakedId = frame._id;
+    video.renderingStatus = "completed";
+    video.renderingError = "";
+    await video.save();
+    if (previousBakedFileId && previousBakedFileId !== video.sourceFileId) await deleteStoredFile(previousBakedFileId, video.storageProvider);
+    return video;
+  } catch (error) {
+    video.renderingStatus = "failed";
+    video.renderingError = (error.message || "Could not burn the active frame into this video").slice(0, 500);
+    await video.save();
+  } finally {
+    await burned?.cleanup();
+  }
+}
+
+function queueBurn(videoId) {
+  Video.findById(videoId)
+    .then((video) => video && burnActiveFrameOnSave(video))
+    .catch((error) => console.error("Video render failed:", error.message));
+}
+
+// In-memory queues are lost on a Node restart. Resume every unfinished job
+// at boot so a deploy, nodemon reload, or transient crash never leaves a
+// video permanently labelled "Processing".
 export async function resumeProcessingVideos() {
-  const result = await Video.updateMany(
-    { renderingStatus: "processing" },
-    { $set: { renderingStatus: "completed", renderingError: "" } }
-  );
-  return result.modifiedCount;
+  const videos = await Video.find({ renderingStatus: "processing" }).select("_id");
+  videos.forEach((video) => queueBurn(video._id));
+  return videos.length;
 }
 
 export const createVideo = asyncHandler(async (req, res) => {
@@ -59,9 +104,8 @@ export const createVideo = asyncHandler(async (req, res) => {
     uploadedByName: req.admin?.name || "",
     uploadedByEmail: req.admin?.email || "",
     uploadedByLocation: req.admin?.location || "",
-    renderingStatus: "completed",
-    renderingError: "",
   });
+  queueBurn(video._id);
 
   res.status(201).json({
     video,
@@ -152,9 +196,8 @@ export const bulkCreateVideos = asyncHandler(async (req, res) => {
         uploadedByName: req.admin.name,
         uploadedByEmail: req.admin.email,
         uploadedByLocation: req.admin.location || "",
-        renderingStatus: "completed",
-        renderingError: "",
       });
+      queueBurn(video._id);
       created.push(video);
     } catch (err) {
       errors.push({ fileName: file.originalname, error: err.message || "Upload failed" });
@@ -250,6 +293,7 @@ export const getPublicVideo = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Video not found");
   }
 
+  if (video.renderingStatus === "processing") throw new ApiError(425, "This video is still being processed");
   if (video.renderingStatus === "failed") throw new ApiError(500, video.renderingError || "Video processing failed");
 
   AnalyticsEvent.create({
@@ -265,7 +309,7 @@ export const getPublicVideo = asyncHandler(async (req, res) => {
 export const getPublicVideoStatus = asyncHandler(async (req, res) => {
   const video = await Video.findOne({ slug: req.params.slug }).select("renderingStatus renderingError");
   if (!video) throw new ApiError(404, "Video not found");
-  res.json({ renderingStatus: "completed", renderingError: "" });
+  res.json({ renderingStatus: video.renderingStatus, renderingError: video.renderingError });
 });
 
 export const trackWatch = asyncHandler(async (req, res) => {
@@ -306,9 +350,10 @@ export const updateVideo = asyncHandler(async (req, res) => {
     cachedRenderFrameVersion: "",
   });
   if (!video.sourceVideoUrl) throw new ApiError(409, "This older video has no original source available. Upload it again to update its details.");
-  video.renderingStatus = "completed";
+  video.renderingStatus = "processing";
   video.renderingError = "";
   await video.save();
+  queueBurn(video._id);
   if (oldCachedFileId) deleteStoredFile(oldCachedFileId, video.storageProvider).catch(() => {});
 
   res.json({ video });
@@ -378,6 +423,8 @@ export const getFramedDownload = asyncHandler(async (req, res) => {
   if (!video) {
     throw new ApiError(404, "Video not found");
   }
+
+  if (video.renderingStatus !== "completed") throw new ApiError(425, "This video is still being processed");
 
   return res.redirect(`${video.videoUrl}?ik-attachment=true`);
 

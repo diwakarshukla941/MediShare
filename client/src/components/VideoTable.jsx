@@ -17,6 +17,14 @@ export default function VideoTable({ videos, onChanged, compact = false, selecta
   const [downloadingId, setDownloadingId] = useState(null);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [deletingSelected, setDeletingSelected] = useState(false);
+  const isProcessing = (video) => video.renderingStatus === "processing";
+
+  useEffect(() => {
+    if (!videos.some(isProcessing)) return undefined;
+    const interval = setInterval(onChanged, 5000);
+    return () => clearInterval(interval);
+  }, [videos, onChanged]);
+
   useEffect(() => setSelectedIds((current) => new Set([...current].filter((id) => videos.some((video) => video._id === id)))), [videos]);
 
   const downloadFramed = async (video) => {
@@ -127,6 +135,8 @@ export default function VideoTable({ videos, onChanged, compact = false, selecta
                     {video.empId ? ` · ${video.empId}` : ""}
                     {video.zone ? ` · ${video.zone}` : ""}
                   </p>
+                  {isProcessing(video) && <span className="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">Processing frame…</span>}
+                  {video.renderingStatus === "failed" && <span className="mt-1 inline-block rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">Processing failed</span>}
                   <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500">
                     <span className="inline-flex items-center gap-1">
                       <Phone size={11} className="text-slate-400" />
@@ -165,13 +175,14 @@ export default function VideoTable({ videos, onChanged, compact = false, selecta
                       target="_blank"
                       rel="noreferrer"
                       title="Watch"
-                      className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                      className={`rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 ${isProcessing(video) ? "pointer-events-none opacity-40" : ""}`}
                     >
                       <Eye size={16} />
                     </a>
                     <button
                       title="Copy link"
                       onClick={() => copyLink(video)}
+                      disabled={isProcessing(video)}
                       className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
                     >
                       <Copy size={16} />
@@ -179,6 +190,7 @@ export default function VideoTable({ videos, onChanged, compact = false, selecta
                     <button
                       title="Share"
                       onClick={() => shareLink(video)}
+                      disabled={isProcessing(video)}
                       className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
                     >
                       <Share2 size={16} />
@@ -186,7 +198,7 @@ export default function VideoTable({ videos, onChanged, compact = false, selecta
                     <button
                       title={downloadingId === video._id ? "Preparing download..." : "Download"}
                       onClick={() => downloadFramed(video)}
-                      disabled={downloadingId === video._id}
+                      disabled={downloadingId === video._id || isProcessing(video)}
                       className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
                     >
                       {downloadingId === video._id ? (

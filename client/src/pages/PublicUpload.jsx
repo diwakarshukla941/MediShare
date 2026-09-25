@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   UploadCloud,
@@ -34,6 +34,19 @@ export default function PublicUpload() {
   // Consent
   const [hasConsent, setHasConsent] = useState(false);
   const [showConsent, setShowConsent] = useState(true);
+
+  useEffect(() => {
+    if (!result?.processing) return undefined;
+    const interval = setInterval(async () => {
+      try {
+        const { data } = await api.get(`/videos/public/${result.slug}/status`);
+        if (data.renderingStatus !== "processing") setResult((current) => ({ ...current, processing: false, failed: data.renderingStatus === "failed" }));
+      } catch {
+        // Keep polling while the render job is active.
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [result]);
 
   const update = (key) => (e) => {
     setForm((f) => ({
@@ -93,6 +106,7 @@ export default function PublicUpload() {
       setResult({
         url: `${window.location.origin}${res.watchPath}`,
         slug: res.slug,
+        processing: res.video.renderingStatus === "processing",
       });
 
       toast.success("Video uploaded successfully");
@@ -116,11 +130,11 @@ export default function PublicUpload() {
           </span>
 
           <h1 className="mt-4 text-xl font-bold text-slate-900">
-            Video Uploaded!
+            {result.processing ? "Video is Processing" : "Video Uploaded!"}
           </h1>
 
           <p className="mt-1.5 text-sm text-slate-500">
-            Share this link with your patients so they can watch it.
+            {result.processing ? "Your branded video is being prepared. This page will update when it is ready." : "Share this link with your patients so they can watch it."}
           </p>
 
           <div className="mt-6">
@@ -132,7 +146,7 @@ export default function PublicUpload() {
               href={result.url}
               target="_blank"
               rel="noreferrer"
-              className="btn-secondary"
+              className={`btn-secondary ${result.processing ? "pointer-events-none opacity-40" : ""}`}
             >
               Preview Video
             </a>
