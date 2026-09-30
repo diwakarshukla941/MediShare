@@ -67,7 +67,6 @@ Add these Worker secrets under **Settings → Variables and Secrets**:
 ```text
 MONGODB_URI
 JWT_SECRET
-STORAGE_CONFIG_ENCRYPTION_KEY
 CLOUDFLARE_ACCESS_KEY_ID
 CLOUDFLARE_SECRET_ACCESS_KEY
 ```
@@ -82,7 +81,7 @@ CLOUDFLARE_PUBLIC_DOMAIN=https://<existing R2 public domain>
 CLOUDFLARE_FOLDER_PREFIX=<existing R2 folder prefix>
 ```
 
-Use the same production MongoDB URI, JWT secret, and storage-config encryption key as the existing API. Keep secrets in Cloudflare's encrypted fields, not in `wrangler.jsonc` or Git.
+R2 configuration is loaded only from these Worker environment values; legacy storage settings saved in MongoDB are ignored. Use the production MongoDB URI and JWT secret. Keep R2 keys and other secrets in Cloudflare's encrypted fields, not in `wrangler.jsonc` or Git. Set `CLOUDFLARE_FOLDER_PREFIX` to the existing key prefix; the current bucket layout shown in the dashboard uses `bonconnect/bonconnect` for active videos and frames, and `bonconnect/medishare` for legacy files. Do not set it to the literal text `undefined`.
 
 The configured Container has 4 GiB memory and 8 GB ephemeral disk. Temporary render files are deleted after processing; video files remain in R2. Container disk is not durable storage.
 
