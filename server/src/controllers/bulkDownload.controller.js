@@ -69,8 +69,9 @@ async function appendVideo(archive, video) {
 }
 
 async function buildArchive(job) {
-  const filter = {};
-  if (job.zone !== "all") filter.zone = job.zone;
+  const filter = job.videoIds?.length
+    ? { _id: { $in: job.videoIds } }
+    : { ...(job.zone !== "all" ? { zone: job.zone } : {}), renderingStatus: "completed" };
   const archiveKey = await getArchiveObjectKey(`${job._id}-${crypto.randomUUID()}.zip`);
   const archive = archiver("zip", { zlib: { level: 0 } });
   let archiveFailure;
@@ -90,7 +91,7 @@ async function buildArchive(job) {
   });
 
   let processedVideos = 0;
-  const cursor = Video.find(filter).sort({ zone: 1, createdAt: 1 }).select("_id zone doctorName videoUrl imagekitFileId storageProvider fileName").lean().cursor();
+  const cursor = Video.find({ ...filter, renderingStatus: "completed" }).sort({ zone: 1, createdAt: 1 }).select("_id zone doctorName videoUrl imagekitFileId storageProvider fileName").lean().cursor();
   try {
     for await (const video of cursor) {
       if (archiveFailure) throw archiveFailure;
@@ -102,6 +103,7 @@ async function buildArchive(job) {
     }
     if (archiveFailure) throw archiveFailure;
     if (!processedVideos) throw new Error("No completed videos were found for this selection");
+    if (processedVideos !== job.totalVideos) throw new Error("Some videos changed or were removed while the archive was being built. Start a new download job.");
     await archive.finalize();
     await uploadPromise;
     await BulkDownloadJob.updateOne({ _id: job._id }, {
@@ -168,12 +170,14 @@ export async function resumeBulkDownloadJobs() {
 
 export const createBulkDownload = asyncHandler(async (req, res) => {
   const zone = String(req.body?.zone || "all").trim() || "all";
-  const filter = {};
+  const filter = { renderingStatus: "completed" };
   if (zone !== "all") filter.zone = zone;
-  const totalVideos = await Video.countDocuments(filter);
-  if (!totalVideos) throw new ApiError(404, "No videos found for this zone");
+  const eligibleVideos = await Video.find(filter).select("_id").lean();
+  const videoIds = eligibleVideos.map((video) => video._id);
+  const totalVideos = videoIds.length;
+  if (!totalVideos) throw new ApiError(404, "No completed videos found for this zone. Wait for processing to finish, then try again.");
   const [sizeStats] = await Video.aggregate([
-    { $match: filter },
+    { $match: { _id: { $in: videoIds } } },
     { $group: { _id: null, totalBytes: { $sum: "$fileSize" } } },
   ]);
 
@@ -183,6 +187,7 @@ export const createBulkDownload = asyncHandler(async (req, res) => {
     zone,
     totalVideos,
     totalBytes: sizeStats?.totalBytes || 0,
+    videoIds,
     archiveName: `bonconnect-videos-${archiveZone}.zip`,
     createdBy: req.admin._id,
   });

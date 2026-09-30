@@ -14,7 +14,8 @@ import VideoDropzone from "../components/VideoDropzone.jsx";
 import CopyLinkField from "../components/CopyLinkField.jsx";
 import ConsentModal from "../components/ConsentModal.jsx";
 import ZoneField from "../components/ZoneField.jsx";
-import { api, getErrorMessage } from "../lib/api.js";
+import { getErrorMessage } from "../lib/api.js";
+import { uploadVideoDirect } from "../lib/directVideoUpload.js";
 
 const initialForm = {
   doctorName: "",
@@ -66,30 +67,12 @@ export default function PublicUpload() {
       return;
     }
 
-    const data = new FormData();
-
-    data.append("video", file);
-
-    Object.entries(form).forEach(([k, v]) => {
-      data.append(k, v);
-    });
-
-    // Consent information
-    data.append("consent", "true");
-    data.append("consentVersion", "1.0");
-
     setUploading(true);
     setProgress(0);
 
     try {
-      const { data: res } = await api.post("/videos", data, {
-        onUploadProgress: (evt) => {
-          if (evt.total) {
-            setProgress(
-              Math.round((evt.loaded * 100) / evt.total)
-            );
-          }
-        },
+      const res = await uploadVideoDirect(file, form, (loaded, total) => {
+        setProgress(Math.round((loaded * 100) / total));
       });
 
       setResult({

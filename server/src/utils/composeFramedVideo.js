@@ -122,7 +122,7 @@ async function burnFrame(inputPath, frame, video, workDir, { dynamicTextOnly = f
   const overlayPath = path.join(workDir, "overlay.png");
   const outputPath = path.join(workDir, "output.mp4");
 
-  const imageDataUriMap = await buildImageDataUriMap(frame);
+  const imageDataUriMap = dynamicTextOnly ? new Map() : await buildImageDataUriMap(frame);
   const svg = buildFrameOverlaySvg(frame, video, imageDataUriMap, videoElement, { dynamicTextOnly });
   await sharp(Buffer.from(svg)).png().toFile(overlayPath);
 
@@ -200,7 +200,7 @@ export async function burnFrameToTempFile(sourceUrl, frame, video, options = {})
 
   try {
     await downloadToFile(sourceUrl, inputPath);
-    const outputPath = await burnFrame(inputPath, frame, video, workDir);
+    const outputPath = await burnFrame(inputPath, frame, video, workDir, options);
     return { path: outputPath, cleanup };
   } catch (err) {
     await cleanup();

@@ -18,6 +18,7 @@ const videoSchema = new mongoose.Schema(
     sourceVideoUrl: { type: String, default: "" },
     sourceFileId: { type: String, default: "" },
     sourceStorageProvider: { type: String, default: "imagekit" },
+    uploadIntentId: { type: String, unique: true, sparse: true },
     thumbnailUrl: { type: String, default: "" },
     imagekitFileId: { type: String, required: true },
     // Legacy name retained for existing records; holds the file key for the
@@ -28,21 +29,15 @@ const videoSchema = new mongoose.Schema(
     duration: { type: Number, default: 0 },
     renderingStatus: { type: String, enum: ["processing", "completed", "failed"], default: "completed", index: true },
     renderingError: { type: String, default: "" },
+    renderLeaseUntil: { type: Date, default: null, index: true },
 
     slug: { type: String, required: true, unique: true, index: true, default: () => nanoid(10) },
 
-    // videoUrl is always the ONLY stored copy — no separate original +
-    // rendered pair. Normally it's the raw upload: the watch page overlays
-    // the active frame live (FrameRenderer), and downloads burn the frame
-    // in on the fly and stream it straight to the browser without ever
-    // saving that burned copy (see getFramedDownload). frameBakedId is set
-    // only when a video has been permanently, deliberately locked to one
-    // specific frame instead — either an older upload (from when frames
-    // were burned in at upload time) or the super-admin-only "re-burn
-    // existing videos" tool (frame.controller.js). In that case videoUrl
-    // itself already has the frame burned in, so the watch page plays it
-    // as-is and downloads just reuse the same file — a later frame change
-    // does NOT retroactively touch it.
+    // The original stays in sourceVideoUrl/sourceFileId so render jobs can
+    // retry and metadata edits can produce a fresh framed file. videoUrl is
+    // the current playback/export asset; frameBakedId identifies the frame
+    // already present in its pixels. Replacing a frame never destroys the
+    // source.
     frameBakedId: { type: mongoose.Schema.Types.ObjectId, ref: "Frame", default: null },
 
     // A one-time-rendered, reusable copy for downloads of an UNBAKED video
