@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { Readable } from "node:stream";
-import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, DeleteObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { getActiveStorageConfig } from "../utils/storageConfig.js";
@@ -20,7 +20,14 @@ function r2(config) {
       accountId: c.accountId,
       accessKeyId: c.accessKeyId,
       secretAccessKey: c.secretAccessKey,
-      client: new S3Client({ region: "auto", endpoint: `https://${c.accountId}.r2.cloudflarestorage.com`, credentials: { accessKeyId: c.accessKeyId, secretAccessKey: c.secretAccessKey } }),
+      client: new S3Client({
+        region: "auto",
+        endpoint: `https://${c.accountId}.r2.cloudflarestorage.com`,
+        credentials: { accessKeyId: c.accessKeyId, secretAccessKey: c.secretAccessKey },
+        // R2 does not support the AWS SDK's optional streaming checksum mode.
+        requestChecksumCalculation: "WHEN_REQUIRED",
+        responseChecksumValidation: "WHEN_REQUIRED",
+      }),
     };
   }
   return { c, client: cachedR2Client.client };
@@ -39,7 +46,19 @@ export async function uploadVideo(file, folder = "videos") {
   const key = `${prefix}/${folder}/${safeName(file.originalname)}`;
   const { c, client } = r2(config);
   try {
-    await client.send(new PutObjectCommand({ Bucket: c.bucket, Key: key, Body: readFile(file), ContentType: file.mimetype || "application/octet-stream" }));
+    const upload = new Upload({
+      client,
+      params: {
+        Bucket: c.bucket,
+        Key: key,
+        Body: readFile(file),
+        ContentType: file.mimetype || "application/octet-stream",
+      },
+      queueSize: 2,
+      partSize: 10 * 1024 * 1024,
+      leavePartsOnError: false,
+    });
+    await upload.done();
     return { url: `${cleanBaseUrl(c.publicBaseUrl)}/${key}`, thumbnailUrl: "", fileId: key, name: path.basename(key), size: file.size, provider: "r2" };
   } finally { if (file.path) await fs.promises.unlink(file.path).catch(() => {}); }
 }
