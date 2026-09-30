@@ -93,6 +93,8 @@ export default function MyVideos() {
     setExporting(true);
     try {
       await downloadVideosSpreadsheet();
+    } catch (error) {
+      toast.error(await getDownloadErrorMessage(error));
     } finally {
       setExporting(false);
     }

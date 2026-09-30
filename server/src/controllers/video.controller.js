@@ -240,11 +240,13 @@ export const getSampleCsv = asyncHandler(async (req, res) => {
 export const exportVideos = asyncHandler(async (req, res) => {
   const videos = await Video.find()
     .sort({ createdAt: -1 })
-    .select("doctorName credentials phone slug uploadedByName");
+    .select("doctorName credentials empId zone phone slug uploadedByName");
   const clientUrl = (process.env.CLIENT_URL || `${req.protocol}://${req.get("host")}`).replace(/\/$/, "");
   const rows = videos.map((video) => ({
     "Doctor Name": video.doctorName,
     Credentials: video.credentials,
+    "Employee ID": video.empId,
+    Zone: video.zone,
     "Mobile Number": video.phone,
     "Video Link": `${clientUrl}/watch/${video.slug}`,
     "Uploaded By": video.uploadedByName || "Public link",
