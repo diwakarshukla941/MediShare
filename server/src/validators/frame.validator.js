@@ -30,7 +30,7 @@ export const frameCreateSchema = z.object({
     .object({
       type: z.enum(["color", "image"]).default("color"),
       value: z.string().default("#eef2ff"),
-      imagekitFileId: z.string().optional().default(""),
+      fileId: z.string().optional().default(""),
     })
     .default({ type: "color", value: "#eef2ff" }),
   elements: z.array(elementSchema).default([]),

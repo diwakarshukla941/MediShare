@@ -2,7 +2,7 @@ import crypto from "crypto";
 import { StorageConfig } from "../models/StorageConfig.js";
 import { ApiError } from "./ApiError.js";
 
-const PROVIDERS = ["imagekit", "r2", "gcs"];
+const PROVIDERS = ["r2"];
 const cache = { value: null, expiresAt: 0 };
 
 function encryptionKey() {
@@ -30,9 +30,15 @@ function decrypt(value) {
 
 function envConfig() {
   return {
-    provider: (process.env.STORAGE_PROVIDER || "imagekit").toLowerCase(),
+    provider: "r2",
     values: {
-      imagekit: { publicKey: process.env.IMAGEKIT_PUBLIC_KEY || "", privateKey: process.env.IMAGEKIT_PRIVATE_KEY || "", urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT || "", folderPrefix: process.env.IMAGEKIT_FOLDER_PREFIX || "/medishare" },
+      r2: {
+        accountId: process.env.CLOUDFLARE_ACCOUNT_ID || "",
+        accessKeyId: process.env.CLOUDFLARE_ACCESS_KEY_ID || "",
+        secretAccessKey: process.env.CLOUDFLARE_SECRET_ACCESS_KEY || "",
+        bucket: process.env.CLOUDFLARE_BUCKET_NAME || "",
+        publicBaseUrl: process.env.CLOUDFLARE_PUBLIC_DOMAIN || "",
+      },
     },
     source: "environment",
   };
@@ -41,9 +47,13 @@ function envConfig() {
 export async function getActiveStorageConfig() {
   if (cache.value && cache.expiresAt > Date.now()) return cache.value;
   const doc = await StorageConfig.findOne({ key: "primary" }).lean();
-  const result = doc?.encryptedConfig
-    ? { provider: doc.provider, values: decrypt(doc.encryptedConfig), source: "dashboard" }
-    : envConfig();
+  const environment = envConfig();
+  const savedValues = doc?.encryptedConfig ? decrypt(doc.encryptedConfig) : {};
+  const result = {
+    provider: "r2",
+    values: { ...environment.values, ...savedValues, r2: { ...environment.values.r2, ...savedValues.r2 } },
+    source: doc?.encryptedConfig ? "dashboard" : "environment",
+  };
   cache.value = result;
   cache.expiresAt = Date.now() + 30_000;
   return result;
@@ -61,9 +71,7 @@ export function publicStorageConfig(config) {
     provider: config.provider,
     source: config.source,
     configured: {
-      imagekit: has(values.imagekit?.publicKey) && has(values.imagekit?.privateKey) && has(values.imagekit?.urlEndpoint),
       r2: has(values.r2?.accountId) && has(values.r2?.accessKeyId) && has(values.r2?.secretAccessKey) && has(values.r2?.bucket) && has(values.r2?.publicBaseUrl),
-      gcs: has(values.gcs?.bucket) && has(values.gcs?.serviceAccountJson) && has(values.gcs?.publicBaseUrl),
     },
   };
 }
@@ -72,20 +80,15 @@ export async function saveStorageConfig({ provider, values, adminId }) {
   if (!PROVIDERS.includes(provider)) throw new ApiError(400, "Unsupported storage provider");
   if (!values?.[provider]) throw new ApiError(400, "Provider credentials are required");
   const existing = await StorageConfig.findOne({ key: "primary" }).lean();
-  const previous = existing?.encryptedConfig ? decrypt(existing.encryptedConfig) : envConfig().values;
+  const environment = envConfig();
+  const savedValues = existing?.encryptedConfig ? decrypt(existing.encryptedConfig) : {};
+  const previous = { ...environment.values, ...savedValues, r2: { ...environment.values.r2, ...savedValues.r2 } };
   // Blank secret fields mean "keep the previously saved value", allowing
   // admins to change a CDN URL without exposing or re-entering credentials.
   const merged = { ...previous, [provider]: { ...(previous[provider] || {}), ...Object.fromEntries(Object.entries(values[provider]).filter(([, v]) => v !== "")) } };
-  const required = {
-    imagekit: ["publicKey", "privateKey", "urlEndpoint"],
-    r2: ["accountId", "accessKeyId", "secretAccessKey", "bucket", "publicBaseUrl"],
-    gcs: ["bucket", "serviceAccountJson", "publicBaseUrl"],
-  };
-  const missing = required[provider].filter((key) => !String(merged[provider]?.[key] || "").trim());
+  const required = ["accountId", "accessKeyId", "secretAccessKey", "bucket", "publicBaseUrl"];
+  const missing = required.filter((key) => !String(merged[provider]?.[key] || "").trim());
   if (missing.length) throw new ApiError(400, `Missing required ${provider} settings: ${missing.join(", ")}`);
-  if (provider === "gcs") {
-    try { JSON.parse(merged.gcs.serviceAccountJson); } catch { throw new ApiError(400, "Google service-account JSON is invalid"); }
-  }
   await StorageConfig.findOneAndUpdate(
     { key: "primary" },
     { provider, encryptedConfig: encrypt(merged), updatedBy: adminId },

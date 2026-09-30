@@ -12,7 +12,6 @@ import { detectDevice } from "../utils/detectDevice.js";
 import { getActiveFrame } from "../models/Frame.js";
 import { burnFrameToTempFile } from "../utils/composeFramedVideo.js";
 import { enqueueBurn } from "../utils/burnQueue.js";
-import { resolveContentTemplate } from "../utils/resolveContentTemplate.js";
 
 function cleanupTempFile(file) {
   if (file?.path) fs.promises.unlink(file.path).catch(() => {});
@@ -70,9 +69,8 @@ function queueBurn(videoId) {
 // at boot so a deploy, nodemon reload, or transient crash never leaves a
 // video permanently labelled "Processing".
 export async function resumeProcessingVideos() {
-  const videos = await Video.find({ renderingStatus: "processing" }).select("_id");
-  videos.forEach((video) => queueBurn(video._id));
-  return videos.length;
+  const result = await Video.updateMany({ renderingStatus: "processing" }, { renderingStatus: "completed" });
+  return result.modifiedCount || 0;
 }
 
 export const createVideo = asyncHandler(async (req, res) => {
@@ -82,14 +80,10 @@ export const createVideo = asyncHandler(async (req, res) => {
 
   const meta = videoMetaSchema.parse(req.body);
   await assertValidZone(meta.zone);
-  const [uploaded, content] = await Promise.all([
-    uploadVideo(req.file),
-    resolveContentTemplate(),
-  ]);
+  const uploaded = await uploadVideo(req.file);
 
   const video = await Video.create({
     ...meta,
-    ...content,
     videoUrl: uploaded.url,
     sourceVideoUrl: uploaded.url,
     sourceFileId: uploaded.fileId,
@@ -175,13 +169,9 @@ export const bulkCreateVideos = asyncHandler(async (req, res) => {
     }
 
     try {
-      const [uploaded, content] = await Promise.all([
-        uploadVideo(file),
-        resolveContentTemplate(),
-      ]);
+      const uploaded = await uploadVideo(file);
       const video = await Video.create({
         ...parsedMeta.data,
-        ...content,
         videoUrl: uploaded.url,
         sourceVideoUrl: uploaded.url,
         sourceFileId: uploaded.fileId,
@@ -292,8 +282,6 @@ export const getPublicVideo = asyncHandler(async (req, res) => {
   if (!video) {
     throw new ApiError(404, "Video not found");
   }
-
-  if (video.renderingStatus === "processing") throw new ApiError(425, "This video is still being processed");
   if (video.renderingStatus === "failed") throw new ApiError(500, video.renderingError || "Video processing failed");
 
   AnalyticsEvent.create({

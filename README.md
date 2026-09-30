@@ -21,7 +21,7 @@ A MERN app for doctors/clinics to upload patient-education videos and get a shar
 
 ## Stack
 - **Client**: React 19 + Vite + Tailwind CSS + React Router + Axios + Recharts (analytics charts) + Konva/react-konva (Frame Designer canvas)
-- **Server**: Express + Mongoose (MongoDB) + JWT auth + Multer (uploads) + ImageKit (video/image storage + CDN) + FFmpeg (`ffmpeg-static` + `fluent-ffmpeg`) + `p-queue` (background render queue)
+- **Server**: Express + Mongoose (MongoDB) + JWT auth + Multer (uploads) + Cloudflare R2 (video/image storage) + FFmpeg (`ffmpeg-static` + `fluent-ffmpeg`) + `p-queue` (background render queue)
 
 ## Project layout
 ```
@@ -38,14 +38,15 @@ medishare/
    npm install
    ```
 
-2. Configure `server/.env` — see `server/.env.example` for the full list. You need a MongoDB connection string and ImageKit credentials (public key, private key, URL endpoint) at minimum.
+2. Configure `server/.env` — see `server/.env.example` for the full list. You need a MongoDB connection string and Cloudflare R2 credentials at minimum.
+3. To migrate existing frame background/logo images from ImageKit, set `IMAGEKIT_URL_ENDPOINT` temporarily and run `npm run migrate:frame-assets:r2` for a dry run, then `npm run migrate:frame-assets:r2 -- --apply` to copy the files and update MongoDB. The migration leaves the ImageKit originals in place.
 
-3. Create the admin account (reads `ADMIN_EMAIL` / `ADMIN_PASSWORD` from `server/.env`):
+4. Create the admin account (reads `ADMIN_EMAIL` / `ADMIN_PASSWORD` from `server/.env`):
    ```
    npm run seed
    ```
 
-4. Start both the API and the client together:
+5. Start both the API and the client together:
    ```
    npm run dev
    ```
@@ -65,7 +66,9 @@ All in `server/.env` (see `server/.env.example`):
 | `JWT_SECRET` | Long random string signing admin session tokens. **Rotate this before going to production** — a leaked/default secret lets anyone forge an admin login. |
 | `JWT_EXPIRES_IN` | Admin session lifetime (default `7d`) |
 | `ADMIN_NAME` / `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Used only by `npm run seed` to create/update the single admin account |
-| `IMAGEKIT_PUBLIC_KEY` / `IMAGEKIT_PRIVATE_KEY` / `IMAGEKIT_URL_ENDPOINT` | ImageKit account — stores original videos, frame-composited (rendered) videos, and frame background/logo images |
+| `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_ACCESS_KEY_ID` / `CLOUDFLARE_SECRET_ACCESS_KEY` | Cloudflare R2 S3-compatible credentials |
+| `CLOUDFLARE_BUCKET_NAME` / `CLOUDFLARE_PUBLIC_DOMAIN` | R2 bucket and public CDN/custom-domain base URL |
+| `CLOUDFLARE_FOLDER_PREFIX` | Object prefix; defaults to `bonconnect` |
 
 There is only **one admin account** for the whole app — whoever has that login sees the full dashboard (My Videos, Upload, Bulk Upload, Analytics, Settings). There's no per-client account separation.
 
@@ -121,11 +124,11 @@ This is deliberately **not** linked anywhere in the dashboard sidebar or UI — 
 
 ## How video rendering works
 
-1. A video is uploaded (public page, dashboard, or bulk) → the **original** file is stored in ImageKit immediately, and the video record is created with `renderingStatus: "none"`.
+1. A video is uploaded (public page, dashboard, or bulk) → the **original** file is stored in Cloudflare R2 immediately, and the video record is created.
 2. If an active frame exists, a render job is queued (`server/src/utils/renderQueue.js`, backed by `p-queue`, concurrency 2 — tune this if you deploy on a bigger box and want more parallel renders).
 3. The job reads the frame's JSON (`server/src/models/Frame.js`), resolves `{{variables}}` against the video's fields, builds an SVG overlay (`server/src/utils/renderFrameSvg.js`) with a transparent "hole" exactly where the Video Area element is, and rasterizes it with `sharp`.
 4. FFmpeg (`server/src/utils/composeFramedVideo.js`) scales/crops (or scales/pads, depending on the Video Area's `objectFit`) the original video into that hole's exact position, overlays the frame graphic on top, and outputs a new MP4.
-5. The rendered MP4 uploads to ImageKit; `Video.renderedUrl` / `renderingStatus: "completed"` are saved. If it fails, `renderingStatus: "failed"` with the error message.
+5. The rendered MP4 uploads to Cloudflare R2; the video record is updated. If it fails, `renderingStatus: "failed"` with the error message.
 6. The **watch page** always shows the live HTML overlay version (instant, no rendering needed) using whichever frame is currently active. **Download** serves the burned-in `renderedUrl` — a normal, playable-anywhere MP4 — falling back to rendering on-demand if it isn't ready yet.
 7. Editing a video's text fields (name, degree, etc.) or activating a different frame automatically re-queues a render so the downloadable file stays in sync.
 

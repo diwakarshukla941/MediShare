@@ -22,7 +22,7 @@ export async function downloadVideosSpreadsheet() {
   const url = URL.createObjectURL(response.data);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "medishare-videos.xlsx";
+  a.download = "bonconnect-videos.xlsx";
   document.body.appendChild(a);
   a.click();
   a.remove();
