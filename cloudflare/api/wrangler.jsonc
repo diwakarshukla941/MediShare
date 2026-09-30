@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "medishare-api",
+  "name": "bonconnect-api",
   "main": "src/index.js",
   "compatibility_date": "2026-09-30",
   "workers_dev": true,
@@ -29,10 +29,26 @@
       "new_sqlite_classes": ["MediShareApiContainer"]
     }
   ],
+  "queues": {
+    "producers": [
+      { "binding": "VIDEO_RENDER_QUEUE", "queue": "bonconnect-video-renders" }
+    ],
+    "consumers": [
+      {
+        "queue": "bonconnect-video-renders",
+        "max_batch_size": 1,
+        "max_retries": 5,
+        "retry_delay": 30,
+        "dead_letter_queue": "bonconnect-video-renders-dlq",
+        "max_concurrency": 1
+      }
+    ]
+  },
   "vars": {
     "NODE_ENV": "production",
     "APP_ENV": "production",
     "PORT": "8080",
-    "JWT_EXPIRES_IN": "7d"
+    "JWT_EXPIRES_IN": "7d",
+    "RENDER_JOBS_VIA_CLOUDFLARE_QUEUE": "true"
   }
 }

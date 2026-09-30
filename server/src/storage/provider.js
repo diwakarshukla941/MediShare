@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { Readable } from "node:stream";
-import { S3Client, DeleteObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, CopyObjectCommand, DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { getActiveStorageConfig } from "../utils/storageConfig.js";
@@ -61,6 +61,46 @@ export async function uploadVideo(file, folder = "videos") {
     await upload.done();
     return { url: `${cleanBaseUrl(c.publicBaseUrl)}/${key}`, thumbnailUrl: "", fileId: key, name: path.basename(key), size: file.size, provider: "r2" };
   } finally { if (file.path) await fs.promises.unlink(file.path).catch(() => {}); }
+}
+
+// Issue a short-lived, content-type-bound URL so the browser can send video
+// bytes directly to R2. The API never receives or buffers the video body.
+export async function createDirectVideoUpload({ originalname, mimetype, intentId }) {
+  const config = await getActiveStorageConfig();
+  const prefix = (config.values?.r2?.folderPrefix || process.env.CLOUDFLARE_FOLDER_PREFIX || "bonconnect").replace(/^\/+|\/+$/g, "");
+  const key = `${prefix}/uploads/${intentId}${path.extname(originalname).toLowerCase() || ".mp4"}`;
+  const { c, client } = r2(config);
+  const command = new PutObjectCommand({
+    Bucket: c.bucket,
+    Key: key,
+    ContentType: mimetype,
+    Metadata: { "upload-intent": intentId },
+  });
+  const uploadUrl = await getSignedUrl(client, command, { expiresIn: 15 * 60 });
+  return { key, uploadUrl, headers: { "Content-Type": mimetype, "x-amz-meta-upload-intent": intentId } };
+}
+
+export async function verifyDirectVideoUpload(key, intentId, expectedSize, expectedType) {
+  const config = await getActiveStorageConfig();
+  const prefix = (config.values?.r2?.folderPrefix || process.env.CLOUDFLARE_FOLDER_PREFIX || "bonconnect").replace(/^\/+|\/+$/g, "");
+  if (!String(key).startsWith(`${prefix}/uploads/${intentId}.`)) throw new Error("Upload object does not match its upload intent");
+  const { c, client } = r2(config);
+  const head = await client.send(new HeadObjectCommand({ Bucket: c.bucket, Key: key }));
+  if (head.ContentLength !== expectedSize) throw new Error("Uploaded file size does not match the upload request");
+  if (head.ContentType !== expectedType) throw new Error("Uploaded file type does not match the upload request");
+  if (head.Metadata?.["upload-intent"] !== intentId) throw new Error("Uploaded file metadata does not match the upload request");
+  return { url: `${cleanBaseUrl(c.publicBaseUrl)}/${key}`, size: head.ContentLength };
+}
+
+export async function promoteDirectVideoUpload(key, intentId, originalname) {
+  const config = await getActiveStorageConfig();
+  const prefix = (config.values?.r2?.folderPrefix || process.env.CLOUDFLARE_FOLDER_PREFIX || "bonconnect").replace(/^\/+|\/+$/g, "");
+  if (!String(key).startsWith(`${prefix}/uploads/${intentId}.`)) throw new Error("Upload object does not match its upload intent");
+  const { c, client } = r2(config);
+  const sourceKey = `${prefix}/sources/${intentId}${path.extname(originalname).toLowerCase() || ".mp4"}`;
+  const encodedSource = `${c.bucket}/${key.split("/").map(encodeURIComponent).join("/")}`;
+  await client.send(new CopyObjectCommand({ Bucket: c.bucket, Key: sourceKey, CopySource: encodedSource, MetadataDirective: "COPY" }));
+  return { key: sourceKey, url: `${cleanBaseUrl(c.publicBaseUrl)}/${sourceKey}` };
 }
 
 export async function deleteStoredFile(fileId, providerName) {

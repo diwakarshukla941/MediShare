@@ -1,12 +1,15 @@
 import fs from "fs";
+import crypto from "node:crypto";
+import jwt from "jsonwebtoken";
 import * as XLSX from "xlsx";
 import { parseSheetFile } from "../utils/parseSheetFile.js";
 import { Video } from "../models/Video.js";
+import { Admin } from "../models/Admin.js";
 import { Zone } from "../models/Zone.js";
 import { AnalyticsEvent } from "../models/AnalyticsEvent.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { uploadVideo, deleteStoredFile, getRenderableUrl } from "../storage/provider.js";
+import { uploadVideo, deleteStoredFile, getRenderableUrl, createDirectVideoUpload, verifyDirectVideoUpload, promoteDirectVideoUpload } from "../storage/provider.js";
 import { videoMetaSchema, videoUpdateSchema } from "../validators/video.validator.js";
 import { detectDevice } from "../utils/detectDevice.js";
 import { getActiveFrame } from "../models/Frame.js";
@@ -65,6 +68,137 @@ function queueBurn(videoId) {
     .catch((error) => console.error("Video render failed:", error.message));
 }
 
+const queueRendersInCloudflare = () => process.env.RENDER_JOBS_VIA_CLOUDFLARE_QUEUE === "true";
+
+function scheduleVideoRender(videoId) {
+  if (!queueRendersInCloudflare()) queueBurn(videoId);
+}
+
+export async function processVideoRenderJob(videoId) {
+  const now = new Date();
+  const video = await Video.findOneAndUpdate({
+    _id: videoId,
+    renderingStatus: { $in: ["processing", "failed"] },
+    $or: [{ renderLeaseUntil: null }, { renderLeaseUntil: { $lte: now } }],
+  }, { $set: { renderingStatus: "processing", renderingError: "", renderLeaseUntil: new Date(Date.now() + 10 * 60_000) } }, { new: true });
+  if (!video) return { skipped: true };
+
+  const heartbeat = setInterval(() => {
+    Video.updateOne({ _id: video._id, renderingStatus: "processing" }, { renderLeaseUntil: new Date(Date.now() + 10 * 60_000) }).catch(() => {});
+  }, 60_000);
+  heartbeat.unref();
+  try {
+    await burnActiveFrameOnSave(video);
+    const finished = await Video.findById(video._id).select("renderingStatus renderingError").lean();
+    if (finished?.renderingStatus === "failed") throw new Error(finished.renderingError || "Frame rendering failed");
+    return { status: finished?.renderingStatus || "completed" };
+  } finally {
+    clearInterval(heartbeat);
+    await Video.updateOne({ _id: video._id }, { renderLeaseUntil: null });
+  }
+}
+
+const DIRECT_VIDEO_TYPES = new Set(["video/mp4", "video/quicktime", "video/x-msvideo", "video/webm"]);
+const MAX_DIRECT_VIDEO_SIZE = 500 * 1024 * 1024;
+
+export const createVideoUploadIntent = asyncHandler(async (req, res) => {
+  const meta = videoMetaSchema.parse(req.body?.metadata || {});
+  const file = req.body?.file || {};
+  const originalname = String(file.name || "").replace(/[\\/\r\n]/g, "_").slice(0, 200);
+  const mimetype = String(file.type || "").toLowerCase();
+  const size = Number(file.size);
+  if (!originalname || !DIRECT_VIDEO_TYPES.has(mimetype)) throw new ApiError(400, "Choose an MP4, MOV, AVI or WEBM video");
+  if (!Number.isSafeInteger(size) || size <= 0 || size > MAX_DIRECT_VIDEO_SIZE) throw new ApiError(400, "Video must be between 1 byte and 500 MB");
+  await assertValidZone(meta.zone);
+
+  const intentId = crypto.randomUUID();
+  const secret = process.env.JWT_SECRET;
+  if (!secret) throw new ApiError(503, "Video uploads are not configured: JWT_SECRET is missing");
+  const target = await createDirectVideoUpload({ originalname, mimetype, intentId });
+  const uploadToken = jwt.sign({
+    intentId,
+    key: target.key,
+    meta,
+    originalname,
+    mimetype,
+    size,
+    adminId: req.admin?._id?.toString() || "",
+    source: req.admin ? "dashboard" : "public",
+  }, secret, { expiresIn: "20m", audience: "video-upload", issuer: "bonconnect-api" });
+
+  res.status(201).json({ uploadUrl: target.uploadUrl, fileId: target.key, headers: target.headers, uploadToken });
+});
+
+export const completeDirectVideoUpload = asyncHandler(async (req, res) => {
+  const token = String(req.body?.uploadToken || "");
+  if (!token) throw new ApiError(400, "Upload completion token is required");
+  const secret = process.env.JWT_SECRET;
+  if (!secret) throw new ApiError(503, "Video uploads are not configured: JWT_SECRET is missing");
+
+  let intent;
+  try {
+    intent = jwt.verify(token, secret, { audience: "video-upload", issuer: "bonconnect-api" });
+  } catch {
+    throw new ApiError(401, "Upload authorization expired. Start the upload again.");
+  }
+
+  const existing = await Video.findOne({ uploadIntentId: intent.intentId });
+  if (existing) {
+    deleteStoredFile(intent.key, "r2").catch(() => {});
+    return res.status(200).json({ video: existing, slug: existing.slug, watchPath: `/watch/${existing.slug}` });
+  }
+
+  let verified;
+  try {
+    verified = await verifyDirectVideoUpload(intent.key, intent.intentId, intent.size, intent.mimetype);
+  } catch (error) {
+    throw new ApiError(400, error.name === "NotFound" ? "The video has not finished uploading to R2" : error.message || "Could not verify the R2 upload");
+  }
+
+  let video;
+  try {
+    const source = await promoteDirectVideoUpload(intent.key, intent.intentId, intent.originalname);
+    const activeFrame = await getActiveFrame();
+    const uploader = intent.adminId
+      ? await Admin.findById(intent.adminId).select("name email location").lean()
+      : null;
+    video = await Video.create({
+      ...intent.meta,
+      videoUrl: source.url,
+      sourceVideoUrl: source.url,
+      sourceFileId: source.key,
+      sourceStorageProvider: "r2",
+      uploadIntentId: intent.intentId,
+      thumbnailUrl: "",
+      imagekitFileId: source.key,
+      storageProvider: "r2",
+      fileName: intent.originalname,
+      fileSize: verified.size,
+      frameBakedId: null,
+      renderingStatus: activeFrame ? "processing" : "completed",
+      renderingError: "",
+      source: intent.source,
+      uploadedBy: intent.adminId || null,
+      uploadedByName: uploader?.name || "",
+      uploadedByEmail: uploader?.email || "",
+      uploadedByLocation: uploader?.location || "",
+    });
+    deleteStoredFile(intent.key, "r2").catch((error) => console.error("Temporary R2 upload cleanup failed:", error.message));
+    if (activeFrame) scheduleVideoRender(video._id);
+  } catch (error) {
+    if (error.code === 11000) {
+      const duplicate = await Video.findOne({ uploadIntentId: intent.intentId });
+      if (duplicate) {
+        deleteStoredFile(intent.key, "r2").catch(() => {});
+        return res.status(200).json({ video: duplicate, slug: duplicate.slug, watchPath: `/watch/${duplicate.slug}` });
+      }
+    }
+    throw error;
+  }
+
+  res.status(201).json({ video, slug: video.slug, watchPath: `/watch/${video.slug}` });
+});
+
 async function uploadBurnedVideo(file, meta, frame) {
   if (!frame) return { uploaded: await uploadVideo(file), frame: null };
 
@@ -85,12 +219,14 @@ async function uploadBurnedVideo(file, meta, frame) {
   }
 }
 
-// In-memory queues are lost on a Node restart. Resume every unfinished job
-// at boot so a deploy, nodemon reload, or transient crash never leaves a
-// video permanently labelled "Processing".
+// Local development resumes the in-process work queue at boot. Production
+// render jobs are recovered by the Cloudflare Queue repair scan instead.
 export async function resumeProcessingVideos() {
-  const result = await Video.updateMany({ renderingStatus: "processing" }, { renderingStatus: "completed" });
-  return result.modifiedCount || 0;
+  const pending = await Video.find({ renderingStatus: "processing" }).select("_id").lean();
+  if (!queueRendersInCloudflare()) {
+    for (const video of pending) queueBurn(video._id);
+  }
+  return pending.length;
 }
 
 export const createVideo = asyncHandler(async (req, res) => {
@@ -358,6 +494,7 @@ export const updateVideo = asyncHandler(async (req, res) => {
   if (!video) {
     throw new ApiError(404, "Video not found");
   }
+  if (video.renderingStatus === "processing") throw new ApiError(409, "Wait for the current video render to finish before editing its details");
 
   // The video's own fields can feed {{variables}} in the active frame, so any
   // previously cached burned copy is stale the moment they change — clear it
@@ -372,7 +509,7 @@ export const updateVideo = asyncHandler(async (req, res) => {
   video.renderingStatus = "processing";
   video.renderingError = "";
   await video.save();
-  queueBurn(video._id);
+  scheduleVideoRender(video._id);
   if (oldCachedFileId) deleteStoredFile(oldCachedFileId, video.storageProvider).catch(() => {});
 
   res.json({ video });
@@ -385,6 +522,9 @@ export const deleteVideo = asyncHandler(async (req, res) => {
   }
 
   await deleteStoredFile(video.imagekitFileId, video.storageProvider);
+  if (video.sourceFileId && video.sourceFileId !== video.imagekitFileId) {
+    await deleteStoredFile(video.sourceFileId, video.sourceStorageProvider);
+  }
   if (video.cachedRenderImagekitFileId) {
     await deleteStoredFile(video.cachedRenderImagekitFileId, video.storageProvider);
   }
@@ -404,6 +544,9 @@ export const bulkDeleteVideos = asyncHandler(async (req, res) => {
   const videos = await Video.find({ _id: { $in: ids } });
   await Promise.all(videos.map(async (video) => {
     await deleteStoredFile(video.imagekitFileId, video.storageProvider);
+    if (video.sourceFileId && video.sourceFileId !== video.imagekitFileId) {
+      await deleteStoredFile(video.sourceFileId, video.sourceStorageProvider);
+    }
     if (video.cachedRenderImagekitFileId) await deleteStoredFile(video.cachedRenderImagekitFileId, video.storageProvider);
     await video.deleteOne();
     AnalyticsEvent.deleteMany({ video: video._id }).catch((err) => console.error("Failed to clean up analytics events:", err.message));
