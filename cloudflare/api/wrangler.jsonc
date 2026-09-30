@@ -1,0 +1,35 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "medishare-api",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-30",
+  "workers_dev": true,
+  "containers": [
+    {
+      "class_name": "MediShareApiContainer",
+      "image": "../../Dockerfile.cloudflare",
+      "max_instances": 1,
+      "instance_type": "standard-1"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "MEDISHARE_API",
+        "class_name": "MediShareApiContainer"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["MediShareApiContainer"]
+    }
+  ],
+  "vars": {
+    "NODE_ENV": "production",
+    "APP_ENV": "production",
+    "PORT": "8080",
+    "JWT_EXPIRES_IN": "7d"
+  }
+}
