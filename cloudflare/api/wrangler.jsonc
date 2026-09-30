@@ -50,6 +50,10 @@
   "vars": {
     "NODE_ENV": "production",
     "APP_ENV": "production",
+    "CLOUDFLARE_ACCOUNT_ID": "a00db16a53412617d89b6983cde39c77",
+    "CLOUDFLARE_BUCKET_NAME": "bonconnect",
+    "CLOUDFLARE_FOLDER_PREFIX": "bonconnect/bonconnect",
+    "CLOUDFLARE_PUBLIC_DOMAIN": "https://pub-b5bae363a92d425b912bb87c8180ed24.r2.dev",
     "PORT": "8080",
     "JWT_EXPIRES_IN": "7d",
     "RENDER_JOBS_VIA_CLOUDFLARE_QUEUE": "true"
