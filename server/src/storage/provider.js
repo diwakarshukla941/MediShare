@@ -32,6 +32,10 @@ function r2(config) {
       client: new S3Client({
         region: "auto",
         endpoint: `https://${c.accountId}.r2.cloudflarestorage.com`,
+        // R2's S3 API expects the bucket in the URL path. Without this,
+        // the SDK puts it in the hostname (bucket.account-id.r2...), which
+        // breaks browser uploads and presigned URL signatures.
+        forcePathStyle: true,
         credentials: { accessKeyId: c.accessKeyId, secretAccessKey: c.secretAccessKey },
         // R2 does not support the AWS SDK's optional streaming checksum mode.
         requestChecksumCalculation: "WHEN_REQUIRED",
