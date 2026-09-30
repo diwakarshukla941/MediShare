@@ -93,9 +93,9 @@ function toEven(n) {
   return r % 2 === 0 ? r : r + 1;
 }
 
-async function burnFrame(inputPath, frame, video, workDir) {
-  const rawVideoElement = (frame.elements || []).find((el) => el.type === "video" && !el.hidden);
-  if (!rawVideoElement) {
+async function burnFrame(inputPath, frame, video, workDir, { dynamicTextOnly = false } = {}) {
+  const rawVideoElement = dynamicTextOnly ? null : (frame.elements || []).find((el) => el.type === "video" && !el.hidden);
+  if (!dynamicTextOnly && !rawVideoElement) {
     throw new Error("This frame has no Video Area element — add one before activating it.");
   }
 
@@ -111,25 +111,26 @@ async function burnFrame(inputPath, frame, video, workDir) {
   // canvas and the padded ffmpeg canvas is visually a non-issue.
   const CW = toEven(frame.width);
   const CH = toEven(frame.height);
-  const videoElement = {
+  const videoElement = rawVideoElement ? {
     ...rawVideoElement,
     x: Math.round(rawVideoElement.x),
     y: Math.round(rawVideoElement.y),
     width: Math.round(rawVideoElement.width),
     height: Math.round(rawVideoElement.height),
-  };
+  } : null;
 
   const overlayPath = path.join(workDir, "overlay.png");
   const outputPath = path.join(workDir, "output.mp4");
 
   const imageDataUriMap = await buildImageDataUriMap(frame);
-  const svg = buildFrameOverlaySvg(frame, video, imageDataUriMap, videoElement);
+  const svg = buildFrameOverlaySvg(frame, video, imageDataUriMap, videoElement, { dynamicTextOnly });
   await sharp(Buffer.from(svg)).png().toFile(overlayPath);
 
-  const { x: vx, y: vy, width: vw, height: vh, objectFit } = videoElement;
+  const { x: vx, y: vy, width: vw, height: vh, objectFit } = videoElement || {};
 
-  const fitFilter =
-    objectFit === "contain"
+  const fitFilter = dynamicTextOnly
+    ? `scale=${CW}:${CH}`
+    : objectFit === "contain"
       ? `scale=${vw}:${vh}:force_original_aspect_ratio=decrease,pad=${vw}:${vh}:(ow-iw)/2:(oh-ih)/2:color=black`
       : `scale=${vw}:${vh}:force_original_aspect_ratio=increase,crop=${vw}:${vh}`;
 
@@ -137,7 +138,9 @@ async function burnFrame(inputPath, frame, video, workDir) {
     ffmpeg(inputPath)
       .input(overlayPath)
       .complexFilter([
-        `[0:v]${fitFilter},pad=${CW}:${CH}:${vx}:${vy}:color=black[padded]`,
+        dynamicTextOnly
+          ? `[0:v]${fitFilter}[padded]`
+          : `[0:v]${fitFilter},pad=${CW}:${CH}:${vx}:${vy}:color=black[padded]`,
         `[padded][1:v]overlay=0:0:format=auto[out]`,
       ])
       .outputOptions([
@@ -189,7 +192,7 @@ async function burnFrame(inputPath, frame, video, workDir) {
  * file (stream it to a download response, or upload it from disk for a
  * permanent re-burn) — it deletes the whole temp work directory.
  */
-export async function burnFrameToTempFile(sourceUrl, frame, video) {
+export async function burnFrameToTempFile(sourceUrl, frame, video, options = {}) {
   const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "medishare-burn-"));
   const ext = path.extname(new URL(sourceUrl).pathname).split("?")[0] || ".mp4";
   const inputPath = path.join(workDir, `input${ext}`);
@@ -205,12 +208,12 @@ export async function burnFrameToTempFile(sourceUrl, frame, video) {
   }
 }
 
-export async function burnLocalVideoToTempFile(inputPath, frame, video) {
+export async function burnLocalVideoToTempFile(inputPath, frame, video, options = {}) {
   const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "medishare-burn-"));
   const cleanup = () => fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
 
   try {
-    const outputPath = await burnFrame(inputPath, frame, video, workDir);
+    const outputPath = await burnFrame(inputPath, frame, video, workDir, options);
     return { path: outputPath, cleanup };
   } catch (err) {
     await cleanup();

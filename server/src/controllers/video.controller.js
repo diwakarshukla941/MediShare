@@ -10,7 +10,7 @@ import { uploadVideo, deleteStoredFile, getRenderableUrl } from "../storage/prov
 import { videoMetaSchema, videoUpdateSchema } from "../validators/video.validator.js";
 import { detectDevice } from "../utils/detectDevice.js";
 import { getActiveFrame } from "../models/Frame.js";
-import { burnFrameToTempFile, burnLocalVideoToTempFile } from "../utils/composeFramedVideo.js";
+import { burnFrameToTempFile, burnLocalVideoToTempFile, frameVersion } from "../utils/composeFramedVideo.js";
 import { enqueueBurn } from "../utils/burnQueue.js";
 
 function cleanupTempFile(file) {
@@ -240,11 +240,13 @@ export const getSampleCsv = asyncHandler(async (req, res) => {
 export const exportVideos = asyncHandler(async (req, res) => {
   const videos = await Video.find()
     .sort({ createdAt: -1 })
-    .select("doctorName credentials phone slug uploadedByName");
+    .select("doctorName credentials empId zone phone slug uploadedByName");
   const clientUrl = (process.env.CLIENT_URL || `${req.protocol}://${req.get("host")}`).replace(/\/$/, "");
   const rows = videos.map((video) => ({
     "Doctor Name": video.doctorName,
     Credentials: video.credentials,
+    "Employee ID": video.empId,
+    Zone: video.zone,
     "Mobile Number": video.phone,
     "Video Link": `${clientUrl}/watch/${video.slug}`,
     "Uploaded By": video.uploadedByName || "Public link",
@@ -443,18 +445,24 @@ export const getFramedDownload = asyncHandler(async (req, res) => {
 
   if (video.renderingStatus !== "completed") throw new ApiError(425, "This video is still being processed");
 
-  return res.redirect(`${video.videoUrl}?ik-attachment=true`);
-
-  if (video.frameBakedId) {
-    return res.redirect(`${video.videoUrl}?ik-attachment=true`);
-  }
-
   const frame = await getActiveFrame();
   if (!frame) {
     return res.redirect(`${video.videoUrl}?ik-attachment=true`);
   }
 
-  const currentVersion = "legacy";
+  const bakedFrameMatches = video.frameBakedId && String(video.frameBakedId) === String(frame._id);
+  if (video.frameBakedId && !bakedFrameMatches) {
+    return res.redirect(`${video.videoUrl}?ik-attachment=true`);
+  }
+
+  const hasDynamicText = (frame.elements || []).some((el) =>
+    !el.hidden && el.type === "text" && /\{\{\s*\w+\s*\}\}/.test(el.content || "")
+  );
+  if (bakedFrameMatches && !hasDynamicText) {
+    return res.redirect(`${video.videoUrl}?ik-attachment=true`);
+  }
+
+  const currentVersion = frameVersion(frame);
   if (video.cachedRenderUrl && video.cachedRenderFrameVersion === currentVersion) {
     return res.redirect(`${video.cachedRenderUrl}?ik-attachment=true`);
   }
@@ -464,9 +472,10 @@ export const getFramedDownload = asyncHandler(async (req, res) => {
     // Queued so at most one ffmpeg burn ever runs at a time — several
     // running together is a fast way to exceed a small container's memory,
     // even if each one alone would have been fine.
-    burned = await enqueueBurn(() => burnFrameToTempFile(video.videoUrl, frame, video));
-    // uploadVideoToImageKit streams from disk and deletes burned.path itself
-    // once done — no separate cleanup call needed on success.
+    burned = await enqueueBurn(() => burnFrameToTempFile(video.videoUrl, frame, video, {
+      dynamicTextOnly: Boolean(bakedFrameMatches),
+    }));
+    // Stream the finished file into R2, then cache it for later downloads.
     const uploaded = await uploadVideo({
       path: burned.path,
       originalname: `${video.slug}-framed.mp4`,

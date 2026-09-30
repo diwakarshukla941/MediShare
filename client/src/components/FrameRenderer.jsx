@@ -118,7 +118,7 @@ function ShapeElement({ el, frame }) {
  * Designer's preview panel. Geometry comes entirely from `frame` — no
  * hardcoded layout — so any client-designed frame renders correctly.
  */
-export default function FrameRenderer({ frame, video, children }) {
+export default function FrameRenderer({ frame, video, children, dynamicTextOnly = false }) {
   if (!frame) {
     // No frame to overlay — let the content (a <video>) size itself at its
     // own natural aspect ratio instead of forcing a fixed box, so square,
@@ -132,6 +132,16 @@ export default function FrameRenderer({ frame, video, children }) {
 
   const elements = (frame.elements || []).filter((el) => !el.hidden);
   const videoEl = elements.find((el) => el.type === "video");
+
+  if (dynamicTextOnly) {
+    return (
+      <div className="pointer-events-none absolute inset-0" style={{ containerType: "inline-size" }}>
+        {elements
+          .filter((el) => el.type === "text" && /\{\{\s*\w+\s*\}\}/.test(el.content || ""))
+          .map((el) => <TextElement key={el.id} el={el} video={video} frame={frame} />)}
+      </div>
+    );
+  }
 
   return (
     <div

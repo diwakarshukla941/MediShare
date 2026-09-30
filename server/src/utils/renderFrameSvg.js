@@ -138,8 +138,19 @@ function renderShapeElement(el) {
  * @param {Map<string,string>} imageDataUriMap - src URL -> base64 data URI, pre-fetched
  * @param {object|null} videoElement - the element of type "video" (window rect), or null
  */
-export function buildFrameOverlaySvg(frame, video, imageDataUriMap = new Map(), videoElement = null) {
+export function buildFrameOverlaySvg(frame, video, imageDataUriMap = new Map(), videoElement = null, { dynamicTextOnly = false } = {}) {
   const { width: W, height: H } = frame;
+
+  // Older baked files may predate dynamic-field rendering. This mode draws
+  // only variable-backed text over the existing baked frame, without adding
+  // a second background or nesting the existing video inside another frame.
+  if (dynamicTextOnly) {
+    const dynamicText = (frame.elements || [])
+      .filter((el) => !el.hidden && el.type === "text" && /\{\{\s*\w+\s*\}\}/.test(el.content || ""))
+      .map((el) => renderTextElement(el, video))
+      .join("\n");
+    return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${dynamicText}</svg>`;
+  }
 
   const backgroundLayer =
     frame.background?.type === "image" && imageDataUriMap.has(frame.background.value)
