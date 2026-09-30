@@ -4,21 +4,30 @@ import { nanoid } from "nanoid";
 const videoSchema = new mongoose.Schema(
   {
     doctorName: { type: String, required: true, trim: true },
-    degree: { type: String, required: true, trim: true },
-    designation: { type: String, trim: true, default: "" },
-    specialization: { type: String, trim: true, default: "" },
-    organizationName: { type: String, trim: true, default: "" },
+    credentials: { type: String, required: true, trim: true },
+    empId: { type: String, required: true, trim: true },
+    zone: { type: String, required: true, trim: true },
     phone: { type: String, required: true, trim: true },
     // Populated automatically at upload time from the global ContentTemplate.
     title: { type: String, trim: true, default: "" },
     description: { type: String, trim: true, default: "" },
 
     videoUrl: { type: String, required: true },
+    // Original source is retained so metadata changes can create a new baked
+    // file without asking the uploader to submit the video again.
+    sourceVideoUrl: { type: String, default: "" },
+    sourceFileId: { type: String, default: "" },
+    sourceStorageProvider: { type: String, default: "imagekit" },
     thumbnailUrl: { type: String, default: "" },
     imagekitFileId: { type: String, required: true },
+    // Legacy name retained for existing records; holds the file key for the
+    // provider recorded below.
+    storageProvider: { type: String, default: "imagekit" },
     fileName: { type: String, required: true },
     fileSize: { type: Number, default: 0 },
     duration: { type: Number, default: 0 },
+    renderingStatus: { type: String, enum: ["processing", "completed", "failed"], default: "completed", index: true },
+    renderingError: { type: String, default: "" },
 
     slug: { type: String, required: true, unique: true, index: true, default: () => nanoid(10) },
 
@@ -71,6 +80,6 @@ const videoSchema = new mongoose.Schema(
   }
 );
 
-videoSchema.index({ doctorName: "text", title: "text", specialization: "text", designation: "text" });
+videoSchema.index({ doctorName: "text", empId: "text", zone: "text" });
 
 export const Video = mongoose.model("Video", videoSchema);

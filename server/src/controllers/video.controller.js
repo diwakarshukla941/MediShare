@@ -2,19 +2,95 @@ import fs from "fs";
 import * as XLSX from "xlsx";
 import { parseSheetFile } from "../utils/parseSheetFile.js";
 import { Video } from "../models/Video.js";
+import { Zone } from "../models/Zone.js";
 import { AnalyticsEvent } from "../models/AnalyticsEvent.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { uploadVideoToImageKit, deleteFromImageKit } from "../utils/uploadToImageKit.js";
+import { uploadVideo, deleteStoredFile, getRenderableUrl } from "../storage/provider.js";
 import { videoMetaSchema, videoUpdateSchema } from "../validators/video.validator.js";
 import { detectDevice } from "../utils/detectDevice.js";
 import { getActiveFrame } from "../models/Frame.js";
-import { burnFrameToTempFile, frameVersion } from "../utils/composeFramedVideo.js";
+import { burnFrameToTempFile, burnLocalVideoToTempFile } from "../utils/composeFramedVideo.js";
 import { enqueueBurn } from "../utils/burnQueue.js";
-import { resolveContentTemplate } from "../utils/resolveContentTemplate.js";
 
 function cleanupTempFile(file) {
   if (file?.path) fs.promises.unlink(file.path).catch(() => {});
+}
+
+async function assertValidZone(zone) {
+  if (!(await Zone.exists({ name: zone }))) throw new ApiError(400, "Select a valid zone from the list");
+}
+
+async function burnActiveFrameOnSave(video) {
+  const frame = await getActiveFrame();
+  if (!frame) {
+    video.renderingStatus = "completed";
+    await video.save();
+    return video;
+  }
+
+  let burned;
+  try {
+    burned = await enqueueBurn(async () => burnFrameToTempFile(await getRenderableUrl(video.sourceVideoUrl || video.videoUrl, video.sourceFileId || video.imagekitFileId, video.sourceStorageProvider || video.storageProvider), frame, video));
+    const uploaded = await uploadVideo({
+      path: burned.path,
+      originalname: `${video.slug}-framed.mp4`,
+      mimetype: "video/mp4",
+    });
+    const previousBakedFileId = video.imagekitFileId;
+    video.videoUrl = uploaded.url;
+    video.thumbnailUrl = uploaded.thumbnailUrl || video.thumbnailUrl;
+    video.imagekitFileId = uploaded.fileId;
+    video.storageProvider = uploaded.provider;
+    video.fileName = uploaded.name;
+    video.fileSize = uploaded.size;
+    video.frameBakedId = frame._id;
+    video.renderingStatus = "completed";
+    video.renderingError = "";
+    await video.save();
+    if (previousBakedFileId && previousBakedFileId !== video.sourceFileId) await deleteStoredFile(previousBakedFileId, video.storageProvider);
+    return video;
+  } catch (error) {
+    video.renderingStatus = "failed";
+    video.renderingError = (error.message || "Could not burn the active frame into this video").slice(0, 500);
+    await video.save();
+  } finally {
+    await burned?.cleanup();
+  }
+}
+
+function queueBurn(videoId) {
+  Video.findById(videoId)
+    .then((video) => video && burnActiveFrameOnSave(video))
+    .catch((error) => console.error("Video render failed:", error.message));
+}
+
+async function uploadBurnedVideo(file, meta, frame) {
+  if (!frame) return { uploaded: await uploadVideo(file), frame: null };
+
+  let burned;
+  try {
+    burned = await enqueueBurn(() => burnLocalVideoToTempFile(file.path, frame, meta));
+    const outputStats = await fs.promises.stat(burned.path);
+    const uploaded = await uploadVideo({
+      path: burned.path,
+      originalname: `${file.originalname.replace(/\.[^.]+$/, "")}-framed.mp4`,
+      mimetype: "video/mp4",
+      size: outputStats.size,
+    });
+    return { uploaded, frame };
+  } finally {
+    cleanupTempFile(file);
+    await burned?.cleanup();
+  }
+}
+
+// In-memory queues are lost on a Node restart. Resume every unfinished job
+// at boot so a deploy, nodemon reload, or transient crash never leaves a
+// video permanently labelled "Processing".
+export async function resumeProcessingVideos() {
+  const result = await Video.updateMany({ renderingStatus: "processing" }, { renderingStatus: "completed" });
+  return result.modifiedCount || 0;
 }
 
 export const createVideo = asyncHandler(async (req, res) => {
@@ -22,20 +98,30 @@ export const createVideo = asyncHandler(async (req, res) => {
     throw new ApiError(400, "A video file is required");
   }
 
-  const meta = videoMetaSchema.parse(req.body);
-  const [uploaded, content] = await Promise.all([
-    uploadVideoToImageKit(req.file),
-    resolveContentTemplate(),
-  ]);
+  let meta;
+  let result;
+  try {
+    meta = videoMetaSchema.parse(req.body);
+    await assertValidZone(meta.zone);
+    result = await uploadBurnedVideo(req.file, meta, await getActiveFrame());
+  } catch (error) {
+    cleanupTempFile(req.file);
+    throw error;
+  }
+  const { uploaded, frame } = result;
 
   const video = await Video.create({
     ...meta,
-    ...content,
     videoUrl: uploaded.url,
+    sourceVideoUrl: "",
+    sourceFileId: "",
+    sourceStorageProvider: uploaded.provider,
     thumbnailUrl: uploaded.thumbnailUrl,
     imagekitFileId: uploaded.fileId,
+    storageProvider: uploaded.provider,
     fileName: uploaded.name,
     fileSize: uploaded.size,
+    frameBakedId: frame?._id || null,
     source: req.admin ? "dashboard" : "public",
     uploadedBy: req.admin?._id || null,
     uploadedByName: req.admin?.name || "",
@@ -88,10 +174,9 @@ export const bulkCreateVideos = asyncHandler(async (req, res) => {
 
     const parsedMeta = videoMetaSchema.safeParse({
       doctorName: row.doctorname,
-      degree: row.degree,
-      designation: row.designation,
-      specialization: row.specialization,
-      organizationName: row.organizationname,
+      credentials: row.credentials,
+      empId: row.empid,
+      zone: row.zone,
       phone: row.phone,
     });
 
@@ -103,20 +188,29 @@ export const bulkCreateVideos = asyncHandler(async (req, res) => {
       cleanupTempFile(file);
       continue;
     }
+    try {
+      await assertValidZone(parsedMeta.data.zone);
+    } catch (err) {
+      errors.push({ fileName: file.originalname, error: err.message });
+      cleanupTempFile(file);
+      continue;
+    }
 
     try {
-      const [uploaded, content] = await Promise.all([
-        uploadVideoToImageKit(file),
-        resolveContentTemplate(),
-      ]);
+      const { uploaded, frame } = await uploadBurnedVideo(file, parsedMeta.data, await getActiveFrame());
       const video = await Video.create({
         ...parsedMeta.data,
-        ...content,
         videoUrl: uploaded.url,
+        sourceVideoUrl: "",
+        sourceFileId: "",
+        sourceStorageProvider: uploaded.provider,
         thumbnailUrl: uploaded.thumbnailUrl,
         imagekitFileId: uploaded.fileId,
+        storageProvider: uploaded.provider,
         fileName: uploaded.name,
         fileSize: uploaded.size,
+        frameBakedId: frame?._id || null,
+        renderingStatus: "completed",
         source: "bulk",
         uploadedBy: req.admin._id,
         uploadedByName: req.admin.name,
@@ -134,8 +228,8 @@ export const bulkCreateVideos = asyncHandler(async (req, res) => {
 
 export const getSampleCsv = asyncHandler(async (req, res) => {
   const csv = [
-    "fileName,doctorName,degree,designation,specialization,phone,organizationName",
-    "sleep-tips.mp4,Dr. Diwakar Shukla,MBBS,Consultant,General Physician,+91 12345 67890,MediCare Clinic",
+    "fileName,doctorName,credentials,empId,zone,phone",
+    "sleep-tips.mp4,Dr. Diwakar Shukla,MBBS,EMP-001,Mumbai,+91 12345 67890",
   ].join("\n");
 
   res.setHeader("Content-Type", "text/csv");
@@ -146,12 +240,11 @@ export const getSampleCsv = asyncHandler(async (req, res) => {
 export const exportVideos = asyncHandler(async (req, res) => {
   const videos = await Video.find()
     .sort({ createdAt: -1 })
-    .select("doctorName degree designation phone slug uploadedByName");
+    .select("doctorName credentials phone slug uploadedByName");
   const clientUrl = (process.env.CLIENT_URL || `${req.protocol}://${req.get("host")}`).replace(/\/$/, "");
   const rows = videos.map((video) => ({
     "Doctor Name": video.doctorName,
-    Degree: video.degree,
-    Designation: video.designation || "",
+    Credentials: video.credentials,
     "Mobile Number": video.phone,
     "Video Link": `${clientUrl}/watch/${video.slug}`,
     "Uploaded By": video.uploadedByName || "Public link",
@@ -218,6 +311,7 @@ export const getPublicVideo = asyncHandler(async (req, res) => {
   if (!video) {
     throw new ApiError(404, "Video not found");
   }
+  if (video.renderingStatus === "failed") throw new ApiError(500, video.renderingError || "Video processing failed");
 
   AnalyticsEvent.create({
     video: video._id,
@@ -227,6 +321,12 @@ export const getPublicVideo = asyncHandler(async (req, res) => {
   }).catch((err) => console.error("Failed to log view event:", err.message));
 
   res.json({ video });
+});
+
+export const getPublicVideoStatus = asyncHandler(async (req, res) => {
+  const video = await Video.findOne({ slug: req.params.slug }).select("renderingStatus renderingError");
+  if (!video) throw new ApiError(404, "Video not found");
+  res.json({ renderingStatus: video.renderingStatus, renderingError: video.renderingError });
 });
 
 export const trackWatch = asyncHandler(async (req, res) => {
@@ -250,6 +350,7 @@ export const trackWatch = asyncHandler(async (req, res) => {
 
 export const updateVideo = asyncHandler(async (req, res) => {
   const updates = videoUpdateSchema.parse(req.body);
+  if (updates.zone) await assertValidZone(updates.zone);
 
   const video = await Video.findById(req.params.id);
   if (!video) {
@@ -265,8 +366,12 @@ export const updateVideo = asyncHandler(async (req, res) => {
     cachedRenderImagekitFileId: "",
     cachedRenderFrameVersion: "",
   });
+  if (!video.sourceVideoUrl) throw new ApiError(409, "This older video has no original source available. Upload it again to update its details.");
+  video.renderingStatus = "processing";
+  video.renderingError = "";
   await video.save();
-  if (oldCachedFileId) deleteFromImageKit(oldCachedFileId).catch(() => {});
+  queueBurn(video._id);
+  if (oldCachedFileId) deleteStoredFile(oldCachedFileId, video.storageProvider).catch(() => {});
 
   res.json({ video });
 });
@@ -277,9 +382,9 @@ export const deleteVideo = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Video not found");
   }
 
-  await deleteFromImageKit(video.imagekitFileId);
+  await deleteStoredFile(video.imagekitFileId, video.storageProvider);
   if (video.cachedRenderImagekitFileId) {
-    await deleteFromImageKit(video.cachedRenderImagekitFileId);
+    await deleteStoredFile(video.cachedRenderImagekitFileId, video.storageProvider);
   }
   await video.deleteOne();
   AnalyticsEvent.deleteMany({ video: video._id }).catch((err) =>
@@ -287,6 +392,21 @@ export const deleteVideo = asyncHandler(async (req, res) => {
   );
 
   res.json({ message: "Video deleted successfully" });
+});
+
+// Intentionally super-admin-only at the route. Deletion is permanent: remove
+// the stored render/source reference, video document, and its analytics data.
+export const bulkDeleteVideos = asyncHandler(async (req, res) => {
+  const ids = [...new Set(Array.isArray(req.body?.ids) ? req.body.ids.map(String) : [])].slice(0, 100);
+  if (!ids.length) throw new ApiError(400, "Select at least one video to delete");
+  const videos = await Video.find({ _id: { $in: ids } });
+  await Promise.all(videos.map(async (video) => {
+    await deleteStoredFile(video.imagekitFileId, video.storageProvider);
+    if (video.cachedRenderImagekitFileId) await deleteStoredFile(video.cachedRenderImagekitFileId, video.storageProvider);
+    await video.deleteOne();
+    AnalyticsEvent.deleteMany({ video: video._id }).catch((err) => console.error("Failed to clean up analytics events:", err.message));
+  }));
+  res.json({ message: `${videos.length} video(s) deleted`, deletedCount: videos.length });
 });
 
 export const incrementShare = asyncHandler(async (req, res) => {
@@ -321,6 +441,10 @@ export const getFramedDownload = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Video not found");
   }
 
+  if (video.renderingStatus !== "completed") throw new ApiError(425, "This video is still being processed");
+
+  return res.redirect(`${video.videoUrl}?ik-attachment=true`);
+
   if (video.frameBakedId) {
     return res.redirect(`${video.videoUrl}?ik-attachment=true`);
   }
@@ -330,7 +454,7 @@ export const getFramedDownload = asyncHandler(async (req, res) => {
     return res.redirect(`${video.videoUrl}?ik-attachment=true`);
   }
 
-  const currentVersion = frameVersion(frame);
+  const currentVersion = "legacy";
   if (video.cachedRenderUrl && video.cachedRenderFrameVersion === currentVersion) {
     return res.redirect(`${video.cachedRenderUrl}?ik-attachment=true`);
   }
@@ -343,7 +467,7 @@ export const getFramedDownload = asyncHandler(async (req, res) => {
     burned = await enqueueBurn(() => burnFrameToTempFile(video.videoUrl, frame, video));
     // uploadVideoToImageKit streams from disk and deletes burned.path itself
     // once done — no separate cleanup call needed on success.
-    const uploaded = await uploadVideoToImageKit({
+    const uploaded = await uploadVideo({
       path: burned.path,
       originalname: `${video.slug}-framed.mp4`,
       mimetype: "video/mp4",
@@ -354,7 +478,7 @@ export const getFramedDownload = asyncHandler(async (req, res) => {
     video.cachedRenderImagekitFileId = uploaded.fileId;
     video.cachedRenderFrameVersion = currentVersion;
     await video.save();
-    if (oldCachedFileId) deleteFromImageKit(oldCachedFileId).catch(() => {});
+    if (oldCachedFileId) deleteStoredFile(oldCachedFileId, video.storageProvider).catch(() => {});
 
     return res.redirect(`${uploaded.url}?ik-attachment=true`);
   } catch (err) {
@@ -377,7 +501,7 @@ export const getStats = asyncHandler(async (req, res) => {
     },
   ]);
 
-  const topVideos = await Video.find().sort({ views: -1 }).limit(8).select("title doctorName views shareCount slug");
+  const topVideos = await Video.find().sort({ views: -1 }).limit(8).select("title doctorName credentials views shareCount slug");
 
   res.json({
     totalVideos: agg?.totalVideos || 0,

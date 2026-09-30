@@ -2,16 +2,14 @@ import { useState } from "react";
 import { X } from "lucide-react";
 import toast from "react-hot-toast";
 import { api, getErrorMessage } from "../lib/api.js";
+import ZoneField from "./ZoneField.jsx";
 
 export default function EditVideoModal({ video, onClose, onSaved }) {
   const [form, setForm] = useState({
     doctorName: video.doctorName || "",
-    degree: video.degree || "",
-    designation: video.designation || "",
-    specialization: video.specialization || "",
-    organizationName: video.organizationName || "",
-    title: video.title || "",
-    description: video.description || "",
+    credentials: video.credentials || "",
+    empId: video.empId || "",
+    zone: video.zone || "",
     phone: video.phone || "",
   });
   const [saving, setSaving] = useState(false);
@@ -49,38 +47,22 @@ export default function EditVideoModal({ video, onClose, onSaved }) {
               <input className="input" value={form.doctorName} onChange={update("doctorName")} required />
             </div>
             <div>
-              <label className="label">Degree</label>
-              <input className="input" value={form.degree} onChange={update("degree")} required />
+              <label className="label">Credentials</label>
+              <input className="input" value={form.credentials} onChange={update("credentials")} required />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="label">Designation</label>
-              <input className="input" value={form.designation} onChange={update("designation")} />
+              <label className="label">Employee ID</label>
+              <input className="input" value={form.empId} onChange={update("empId")} required />
             </div>
             <div>
               <label className="label">Phone</label>
               <input className="input" value={form.phone} onChange={update("phone")} required />
             </div>
             <div>
-              <label className="label">Specialization</label>
-              <input className="input" value={form.specialization} onChange={update("specialization")} />
+              <ZoneField value={form.zone} onChange={update("zone")} />
             </div>
-            <div>
-              <label className="label">Organization Name</label>
-              <input className="input" value={form.organizationName} onChange={update("organizationName")} />
-            </div>
-          </div>
-          <p className="text-xs text-slate-400">
-            Title/description below override whatever the content templates would otherwise fill in for this video.
-          </p>
-          <div>
-            <label className="label">Title</label>
-            <input className="input" value={form.title} onChange={update("title")} />
-          </div>
-          <div>
-            <label className="label">Description</label>
-            <textarea className="input" rows={3} value={form.description} onChange={update("description")} />
           </div>
 
           <div className="flex justify-end gap-2.5 pt-1">

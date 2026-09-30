@@ -3,8 +3,7 @@ import { Video } from "../models/Video.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { frameCreateSchema, frameUpdateSchema } from "../validators/frame.validator.js";
-import { getImageKit, imagekitFolder } from "../config/imagekit.js";
-import { uploadVideoToImageKit, deleteFromImageKit } from "../utils/uploadToImageKit.js";
+import { uploadVideo, deleteStoredFile } from "../storage/provider.js";
 import { burnFrameToTempFile } from "../utils/composeFramedVideo.js";
 import { enqueueBurn } from "../utils/burnQueue.js";
 import { AVAILABLE_VARIABLES } from "../utils/resolveVariables.js";
@@ -79,8 +78,8 @@ export const deleteFrame = asyncHandler(async (req, res) => {
     });
   }
 
-  if (frame.background?.imagekitFileId) {
-    await deleteFromImageKit(frame.background.imagekitFileId);
+  if (frame.background?.fileId) {
+    await deleteStoredFile(frame.background.fileId);
   }
 
   await frame.deleteOne();
@@ -112,7 +111,7 @@ export const activateFrame = asyncHandler(async (req, res) => {
 // source left (see Video.frameBakedId) and is permanently excluded.
 export const listUnbakedVideos = asyncHandler(async (req, res) => {
   const videos = await Video.find({ frameBakedId: null })
-    .select("doctorName designation phone fileSize createdAt")
+    .select("doctorName empId zone phone fileSize createdAt")
     .sort({ createdAt: -1 });
   res.json({ videos });
 });
@@ -144,7 +143,7 @@ export const burnExistingVideos = asyncHandler(async (req, res) => {
       burnedFile = await enqueueBurn(() => burnFrameToTempFile(video.videoUrl, frame, video));
       // uploadVideoToImageKit streams from disk and deletes burnedFile.path
       // itself once done — no separate cleanup call needed on success.
-      const uploaded = await uploadVideoToImageKit({
+      const uploaded = await uploadVideo({
         path: burnedFile.path,
         originalname: withMp4Ext(video.fileName),
         mimetype: "video/mp4",
@@ -153,12 +152,13 @@ export const burnExistingVideos = asyncHandler(async (req, res) => {
       const oldFileId = video.imagekitFileId;
       video.videoUrl = uploaded.url;
       video.imagekitFileId = uploaded.fileId;
+      video.storageProvider = uploaded.provider;
       video.fileName = uploaded.name;
       video.fileSize = uploaded.size;
       video.frameBakedId = frame._id;
       await video.save();
 
-      deleteFromImageKit(oldFileId).catch(() => {});
+      deleteStoredFile(oldFileId, video.storageProvider).catch(() => {});
       burned.push({ id: video._id, doctorName: video.doctorName });
     } catch (err) {
       errors.push({ id: video._id, doctorName: video.doctorName, error: (err.message || "Failed").slice(0, 300) });
@@ -173,13 +173,6 @@ export const burnExistingVideos = asyncHandler(async (req, res) => {
 export const uploadFrameAsset = asyncHandler(async (req, res) => {
   if (!req.file) throw new ApiError(400, "An image file is required");
 
-  const imagekit = getImageKit();
-  const uploaded = await imagekit.upload({
-    file: req.file.buffer,
-    fileName: req.file.originalname,
-    folder: imagekitFolder("frame-assets"),
-    useUniqueFileName: true,
-  });
-
+  const uploaded = await uploadVideo(req.file, "frames");
   res.json({ url: uploaded.url, fileId: uploaded.fileId });
 });

@@ -22,11 +22,29 @@ export async function downloadVideosSpreadsheet() {
   const url = URL.createObjectURL(response.data);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "medishare-videos.xlsx";
+  a.download = "bonconnect-videos.xlsx";
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+export async function createVideosArchive(zone = "all") {
+  const response = await api.post("/videos/bulk-download", { zone });
+  return response.data.job;
+}
+
+export async function getVideosArchiveStatus(jobId) {
+  const response = await api.get(`/videos/bulk-download/${jobId}`);
+  return response.data.job;
+}
+
+export function downloadVideosArchive(url) {
+  const a = document.createElement("a");
+  a.href = url;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
 // With responseType: "blob", axios hands back a Blob even for error

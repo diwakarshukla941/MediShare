@@ -3,14 +3,14 @@ import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import Topbar from "../../components/dashboard/Topbar.jsx";
 import VideoDropzone from "../../components/VideoDropzone.jsx";
+import ZoneField from "../../components/ZoneField.jsx";
 import { api, getErrorMessage } from "../../lib/api.js";
 
 const initialForm = {
   doctorName: "",
-  degree: "",
-  designation: "",
-  specialization: "",
-  organizationName: "",
+  credentials: "",
+  empId: "",
+  zone: "",
   phone: "",
 };
 
@@ -69,16 +69,17 @@ export default function UploadSingle() {
               />
             </div>
             <div>
-              <label className="label">Degree</label>
-              <input className="input" required placeholder="MBBS" value={form.degree} onChange={update("degree")} />
+              <label className="label">Credentials</label>
+              <input className="input" required placeholder="MBBS" value={form.credentials} onChange={update("credentials")} />
             </div>
             <div>
-              <label className="label">Specialization</label>
+              <label className="label">Employee ID</label>
               <input
                 className="input"
-                placeholder="General Physician"
-                value={form.specialization}
-                onChange={update("specialization")}
+                required
+                placeholder="EMP-001"
+                value={form.empId}
+                onChange={update("empId")}
               />
             </div>
             <div>
@@ -92,24 +93,7 @@ export default function UploadSingle() {
                 onChange={update("phone")}
               />
             </div>
-            <div>
-              <label className="label">Designation</label>
-              <input
-                className="input"
-                placeholder="Consultant"
-                value={form.designation}
-                onChange={update("designation")}
-              />
-            </div>
-            <div>
-              <label className="label">Organization Name</label>
-              <input
-                className="input"
-                placeholder="MediCare Clinic"
-                value={form.organizationName}
-                onChange={update("organizationName")}
-              />
-            </div>
+            <ZoneField value={form.zone} onChange={update("zone")} />
           </div>
 
           {uploading && (

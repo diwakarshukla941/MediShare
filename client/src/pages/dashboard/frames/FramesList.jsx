@@ -12,11 +12,11 @@ const FRAME_STUDIO_BASE = "/dashboard/frame-studio-1845fd3e26ad";
 
 const SAMPLE_VIDEO = {
   doctorName: "Diwakar Shukla",
-  degree: "MBBS",
-  specialization: "General Physician",
+  credentials: "MBBS",
+  empId: "EMP-001",
   title: "Health Tips for Good Sleep",
   description: "Simple tips for better sleep",
-  organizationName: "MediCare Clinic",
+  zone: "Mumbai",
 };
 
 export default function FramesList() {
@@ -78,10 +78,6 @@ export default function FramesList() {
 
       <div className="px-4 py-6 sm:px-8">
         <div className="mb-5 flex justify-end gap-2">
-          <Link to={`${FRAME_STUDIO_BASE}/content-templates`} className="btn-secondary">
-            <FileText size={16} />
-            Content Templates
-          </Link>
           <Link to={`${FRAME_STUDIO_BASE}/new`} className="btn-primary">
             <Plus size={16} />
             Create New Frame

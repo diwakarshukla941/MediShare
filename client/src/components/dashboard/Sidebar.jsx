@@ -11,6 +11,8 @@ import {
   Wand2,
   FileText,
   Users,
+  MapPin,
+  HardDrive,
 } from "lucide-react";
 import Logo from "../Logo.jsx";
 import { useAuth } from "../../context/AuthContext.jsx";
@@ -27,14 +29,11 @@ const links = [
   { to: "/dashboard/bulk-upload", label: "Bulk Upload", icon: Layers, superAdminOnly: true },
   { to: "/dashboard/analytics", label: "Analytics", icon: BarChart3, permission: "analytics:view" },
   { to: FRAME_STUDIO_BASE, label: "Frame Studio", icon: Wand2, permission: "frames:manage" },
-  {
-    to: `${FRAME_STUDIO_BASE}/content-templates`,
-    label: "Content Templates",
-    icon: FileText,
-    permission: "content_templates:manage",
-  },
+
   { to: "/dashboard/settings", label: "Settings", icon: Settings, permission: null },
   { to: "/dashboard/team", label: "Team & Access", icon: Users, permission: "team:manage" },
+  { to: "/dashboard/zones", label: "Zones", icon: MapPin, superAdminOnly: true },
+  { to: "/dashboard/storage", label: "Storage & CDN", icon: HardDrive, superAdminOnly: true },
 ];
 
 const ENV_BADGE = {

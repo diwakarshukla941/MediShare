@@ -6,7 +6,6 @@ export const PERMISSION_LABELS = {
   "videos:upload": "Upload Video",
   "analytics:view": "Analytics",
   "frames:manage": "Frame Studio",
-  "content_templates:manage": "Content Templates",
   "team:manage": "Team & Access",
 };
 

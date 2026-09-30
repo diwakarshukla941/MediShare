@@ -59,7 +59,7 @@ export default function Team() {
     const url = URL.createObjectURL(data);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "medishare-team-sample.csv";
+    a.download = "bonconnect-team-sample.csv";
     a.click();
     URL.revokeObjectURL(url);
   };
