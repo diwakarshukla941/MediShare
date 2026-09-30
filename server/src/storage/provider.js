@@ -14,7 +14,16 @@ let cachedR2Client;
 
 function r2(config) {
   const c = config.values.r2 || {};
-  if (!c.accountId || !c.accessKeyId || !c.secretAccessKey || !c.bucket) throw new Error("Cloudflare R2 is not completely configured.");
+  const missing = ["accountId", "accessKeyId", "secretAccessKey", "bucket", "publicBaseUrl", "folderPrefix"]
+    .filter((key) => !String(c[key] || "").trim() || /^(undefined|null)$/i.test(String(c[key]).trim()));
+  if (missing.length) throw new Error(`Cloudflare R2 environment is incomplete. Set: ${missing.map((key) => ({
+    accountId: "CLOUDFLARE_ACCOUNT_ID",
+    accessKeyId: "CLOUDFLARE_ACCESS_KEY_ID",
+    secretAccessKey: "CLOUDFLARE_SECRET_ACCESS_KEY",
+    bucket: "CLOUDFLARE_BUCKET_NAME",
+    publicBaseUrl: "CLOUDFLARE_PUBLIC_DOMAIN",
+    folderPrefix: "CLOUDFLARE_FOLDER_PREFIX",
+  })[key]).join(", ")}`);
   if (!cachedR2Client || cachedR2Client.accountId !== c.accountId || cachedR2Client.accessKeyId !== c.accessKeyId || cachedR2Client.secretAccessKey !== c.secretAccessKey) {
     cachedR2Client = {
       accountId: c.accountId,
@@ -33,6 +42,8 @@ function r2(config) {
   return { c, client: cachedR2Client.client };
 }
 
+const folderPrefix = (config) => String(config.values?.r2?.folderPrefix || "").replace(/^\/+|\/+$/g, "");
+
 export async function getStorageProviderName() {
   await getActiveStorageConfig();
   return "r2";
@@ -40,9 +51,7 @@ export async function getStorageProviderName() {
 
 export async function uploadVideo(file, folder = "videos") {
   const config = await getActiveStorageConfig();
-  const prefix = folder === "frames"
-    ? "bonconnect"
-    : (config.values?.r2?.folderPrefix || process.env.CLOUDFLARE_FOLDER_PREFIX || "bonconnect").replace(/^\/+|\/+$/g, "");
+  const prefix = folderPrefix(config);
   const key = `${prefix}/${folder}/${safeName(file.originalname)}`;
   const { c, client } = r2(config);
   try {
@@ -67,7 +76,7 @@ export async function uploadVideo(file, folder = "videos") {
 // bytes directly to R2. The API never receives or buffers the video body.
 export async function createDirectVideoUpload({ originalname, mimetype, intentId }) {
   const config = await getActiveStorageConfig();
-  const prefix = (config.values?.r2?.folderPrefix || process.env.CLOUDFLARE_FOLDER_PREFIX || "bonconnect").replace(/^\/+|\/+$/g, "");
+  const prefix = folderPrefix(config);
   const key = `${prefix}/uploads/${intentId}${path.extname(originalname).toLowerCase() || ".mp4"}`;
   const { c, client } = r2(config);
   const command = new PutObjectCommand({
@@ -82,7 +91,7 @@ export async function createDirectVideoUpload({ originalname, mimetype, intentId
 
 export async function verifyDirectVideoUpload(key, intentId, expectedSize, expectedType) {
   const config = await getActiveStorageConfig();
-  const prefix = (config.values?.r2?.folderPrefix || process.env.CLOUDFLARE_FOLDER_PREFIX || "bonconnect").replace(/^\/+|\/+$/g, "");
+  const prefix = folderPrefix(config);
   if (!String(key).startsWith(`${prefix}/uploads/${intentId}.`)) throw new Error("Upload object does not match its upload intent");
   const { c, client } = r2(config);
   const head = await client.send(new HeadObjectCommand({ Bucket: c.bucket, Key: key }));
@@ -94,7 +103,7 @@ export async function verifyDirectVideoUpload(key, intentId, expectedSize, expec
 
 export async function promoteDirectVideoUpload(key, intentId, originalname) {
   const config = await getActiveStorageConfig();
-  const prefix = (config.values?.r2?.folderPrefix || process.env.CLOUDFLARE_FOLDER_PREFIX || "bonconnect").replace(/^\/+|\/+$/g, "");
+  const prefix = folderPrefix(config);
   if (!String(key).startsWith(`${prefix}/uploads/${intentId}.`)) throw new Error("Upload object does not match its upload intent");
   const { c, client } = r2(config);
   const sourceKey = `${prefix}/sources/${intentId}${path.extname(originalname).toLowerCase() || ".mp4"}`;
@@ -106,7 +115,7 @@ export async function promoteDirectVideoUpload(key, intentId, originalname) {
 export async function deleteStoredFile(fileId, providerName) {
   if (!fileId) return;
   const config = await getActiveStorageConfig();
-  const prefix = (config.values?.r2?.folderPrefix || process.env.CLOUDFLARE_FOLDER_PREFIX || "bonconnect").replace(/^\/+|\/+$/g, "");
+  const prefix = folderPrefix(config);
   if (!String(fileId).startsWith(`${prefix}/`) && !String(fileId).startsWith("bonconnect/")) return;
   const { c, client } = r2(config);
   return client.send(new DeleteObjectCommand({ Bucket: c.bucket, Key: fileId }));
@@ -114,7 +123,7 @@ export async function deleteStoredFile(fileId, providerName) {
 
 export async function getRenderableUrl(url, fileId, providerName) {
   const config = await getActiveStorageConfig();
-  const prefix = (config.values?.r2?.folderPrefix || process.env.CLOUDFLARE_FOLDER_PREFIX || "bonconnect").replace(/^\/+|\/+$/g, "");
+  const prefix = folderPrefix(config);
   if (!String(fileId || "").startsWith(`${prefix}/`)) return url;
   const { c, client } = r2(config);
   return getSignedUrl(client, new GetObjectCommand({ Bucket: c.bucket, Key: fileId }), { expiresIn: 900 });
@@ -122,7 +131,7 @@ export async function getRenderableUrl(url, fileId, providerName) {
 
 export async function getStoredVideoStream(url, fileId, providerName) {
   const config = await getActiveStorageConfig();
-  const prefix = (config.values?.r2?.folderPrefix || process.env.CLOUDFLARE_FOLDER_PREFIX || "bonconnect").replace(/^\/+|\/+$/g, "");
+  const prefix = folderPrefix(config);
   const key = String(fileId || "");
   if (providerName === "r2" && (key.startsWith(`${prefix}/`) || key.startsWith("bonconnect/"))) {
     const { c, client } = r2(config);
@@ -150,13 +159,13 @@ export async function uploadArchiveStream(body, key, partSize) {
 
 export async function getArchiveObjectKey(filename) {
   const config = await getActiveStorageConfig();
-  const prefix = (config.values?.r2?.folderPrefix || process.env.CLOUDFLARE_FOLDER_PREFIX || "bonconnect").replace(/^\/+|\/+$/g, "");
+  const prefix = folderPrefix(config);
   return `${prefix}/archives/${filename}`;
 }
 
 export async function getArchiveDownloadUrl(key, filename) {
   const config = await getActiveStorageConfig();
-  const prefix = (config.values?.r2?.folderPrefix || process.env.CLOUDFLARE_FOLDER_PREFIX || "bonconnect").replace(/^\/+|\/+$/g, "");
+  const prefix = folderPrefix(config);
   if (!String(key || "").startsWith(`${prefix}/archives/`)) throw new Error("Archive file is invalid");
   const { c, client } = r2(config);
   return getSignedUrl(client, new GetObjectCommand({
