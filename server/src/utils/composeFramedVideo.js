@@ -204,3 +204,16 @@ export async function burnFrameToTempFile(sourceUrl, frame, video) {
     throw err;
   }
 }
+
+export async function burnLocalVideoToTempFile(inputPath, frame, video) {
+  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "medishare-burn-"));
+  const cleanup = () => fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
+
+  try {
+    const outputPath = await burnFrame(inputPath, frame, video, workDir);
+    return { path: outputPath, cleanup };
+  } catch (err) {
+    await cleanup();
+    throw err;
+  }
+}

@@ -29,6 +29,24 @@ export async function downloadVideosSpreadsheet() {
   URL.revokeObjectURL(url);
 }
 
+export async function createVideosArchive(zone = "all") {
+  const response = await api.post("/videos/bulk-download", { zone });
+  return response.data.job;
+}
+
+export async function getVideosArchiveStatus(jobId) {
+  const response = await api.get(`/videos/bulk-download/${jobId}`);
+  return response.data.job;
+}
+
+export function downloadVideosArchive(url) {
+  const a = document.createElement("a");
+  a.href = url;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 // With responseType: "blob", axios hands back a Blob even for error
 // responses — getErrorMessage's `err.response.data.message` lookup can't
 // see inside it, so unwrap the JSON ourselves when that's what came back.

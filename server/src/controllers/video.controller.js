@@ -10,7 +10,7 @@ import { uploadVideo, deleteStoredFile, getRenderableUrl } from "../storage/prov
 import { videoMetaSchema, videoUpdateSchema } from "../validators/video.validator.js";
 import { detectDevice } from "../utils/detectDevice.js";
 import { getActiveFrame } from "../models/Frame.js";
-import { burnFrameToTempFile } from "../utils/composeFramedVideo.js";
+import { burnFrameToTempFile, burnLocalVideoToTempFile } from "../utils/composeFramedVideo.js";
 import { enqueueBurn } from "../utils/burnQueue.js";
 
 function cleanupTempFile(file) {
@@ -65,6 +65,26 @@ function queueBurn(videoId) {
     .catch((error) => console.error("Video render failed:", error.message));
 }
 
+async function uploadBurnedVideo(file, meta, frame) {
+  if (!frame) return { uploaded: await uploadVideo(file), frame: null };
+
+  let burned;
+  try {
+    burned = await enqueueBurn(() => burnLocalVideoToTempFile(file.path, frame, meta));
+    const outputStats = await fs.promises.stat(burned.path);
+    const uploaded = await uploadVideo({
+      path: burned.path,
+      originalname: `${file.originalname.replace(/\.[^.]+$/, "")}-framed.mp4`,
+      mimetype: "video/mp4",
+      size: outputStats.size,
+    });
+    return { uploaded, frame };
+  } finally {
+    cleanupTempFile(file);
+    await burned?.cleanup();
+  }
+}
+
 // In-memory queues are lost on a Node restart. Resume every unfinished job
 // at boot so a deploy, nodemon reload, or transient crash never leaves a
 // video permanently labelled "Processing".
@@ -78,28 +98,36 @@ export const createVideo = asyncHandler(async (req, res) => {
     throw new ApiError(400, "A video file is required");
   }
 
-  const meta = videoMetaSchema.parse(req.body);
-  await assertValidZone(meta.zone);
-  const uploaded = await uploadVideo(req.file);
+  let meta;
+  let result;
+  try {
+    meta = videoMetaSchema.parse(req.body);
+    await assertValidZone(meta.zone);
+    result = await uploadBurnedVideo(req.file, meta, await getActiveFrame());
+  } catch (error) {
+    cleanupTempFile(req.file);
+    throw error;
+  }
+  const { uploaded, frame } = result;
 
   const video = await Video.create({
     ...meta,
     videoUrl: uploaded.url,
-    sourceVideoUrl: uploaded.url,
-    sourceFileId: uploaded.fileId,
+    sourceVideoUrl: "",
+    sourceFileId: "",
     sourceStorageProvider: uploaded.provider,
     thumbnailUrl: uploaded.thumbnailUrl,
     imagekitFileId: uploaded.fileId,
     storageProvider: uploaded.provider,
     fileName: uploaded.name,
     fileSize: uploaded.size,
+    frameBakedId: frame?._id || null,
     source: req.admin ? "dashboard" : "public",
     uploadedBy: req.admin?._id || null,
     uploadedByName: req.admin?.name || "",
     uploadedByEmail: req.admin?.email || "",
     uploadedByLocation: req.admin?.location || "",
   });
-  queueBurn(video._id);
 
   res.status(201).json({
     video,
@@ -169,25 +197,26 @@ export const bulkCreateVideos = asyncHandler(async (req, res) => {
     }
 
     try {
-      const uploaded = await uploadVideo(file);
+      const { uploaded, frame } = await uploadBurnedVideo(file, parsedMeta.data, await getActiveFrame());
       const video = await Video.create({
         ...parsedMeta.data,
         videoUrl: uploaded.url,
-        sourceVideoUrl: uploaded.url,
-        sourceFileId: uploaded.fileId,
+        sourceVideoUrl: "",
+        sourceFileId: "",
         sourceStorageProvider: uploaded.provider,
         thumbnailUrl: uploaded.thumbnailUrl,
         imagekitFileId: uploaded.fileId,
         storageProvider: uploaded.provider,
         fileName: uploaded.name,
         fileSize: uploaded.size,
+        frameBakedId: frame?._id || null,
+        renderingStatus: "completed",
         source: "bulk",
         uploadedBy: req.admin._id,
         uploadedByName: req.admin.name,
         uploadedByEmail: req.admin.email,
         uploadedByLocation: req.admin.location || "",
       });
-      queueBurn(video._id);
       created.push(video);
     } catch (err) {
       errors.push({ fileName: file.originalname, error: err.message || "Upload failed" });

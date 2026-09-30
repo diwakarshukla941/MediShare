@@ -2,6 +2,7 @@ import "dotenv/config";
 import { createApp } from "./app.js";
 import { connectDB } from "./config/db.js";
 import { resumeProcessingVideos } from "./controllers/video.controller.js";
+import { resumeBulkDownloadJobs } from "./controllers/bulkDownload.controller.js";
 
 const PORT = process.env.PORT || 5000;
 
@@ -9,6 +10,7 @@ async function start() {
   try {
     await connectDB();
     const resumed = await resumeProcessingVideos();
+    await resumeBulkDownloadJobs();
     const app = createApp();
     app.listen(PORT, () => {
       console.log(`MediShare API running on http://localhost:${PORT}`);

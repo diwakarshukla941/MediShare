@@ -3,6 +3,8 @@ dist/
 build/
 .env
 .env.local
+/render.staging.env
+/render.production.env
 *.log
 .DS_Store
 Thumbs.db
