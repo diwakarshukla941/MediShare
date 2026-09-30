@@ -1,6 +1,9 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "bonconnect-api",
+  // Keep this stable: the existing Container application is named from this
+  // Wrangler project name. Workers Builds overrides the deployed Worker name
+  // to bonconnect-api, but changing this would create a conflicting Container.
+  "name": "medishare-api",
   "main": "src/index.js",
   "compatibility_date": "2026-09-30",
   "workers_dev": true,
