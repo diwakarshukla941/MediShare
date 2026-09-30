@@ -89,7 +89,14 @@ export async function createDirectVideoUpload({ originalname, mimetype, intentId
     ContentType: mimetype,
     Metadata: { "upload-intent": intentId },
   });
-  const uploadUrl = await getSignedUrl(client, command, { expiresIn: 15 * 60 });
+  const uploadUrl = await getSignedUrl(client, command, {
+    expiresIn: 15 * 60,
+    // The browser sends both headers with the PUT. Keep metadata as a signed
+    // header instead of hoisting it into the URL query, and bind the
+    // Content-Type so R2 verifies the exact headers sent by the browser.
+    signableHeaders: new Set(["content-type"]),
+    unhoistableHeaders: new Set(["x-amz-meta-upload-intent"]),
+  });
   return { key, uploadUrl, headers: { "Content-Type": mimetype, "x-amz-meta-upload-intent": intentId } };
 }
 
