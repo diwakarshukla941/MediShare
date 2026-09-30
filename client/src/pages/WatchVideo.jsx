@@ -139,7 +139,7 @@ export default function WatchVideo() {
         <div className="flex gap-2">
           <button onClick={download} className="btn-secondary" disabled={downloading}>
             {downloading ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
-            {downloading ? "Burning frame..." : "Download"}
+            {downloading ? "Downloading..." : "Download"}
           </button>
           <button onClick={share} className="btn-primary">
             <Share2 size={15} />
@@ -175,8 +175,8 @@ export default function WatchVideo() {
         <div className="mt-6">
           {video.title && <h1 className="text-lg font-bold text-slate-900">{video.title}</h1>}
           <p className="mt-1 text-sm text-slate-500">
-            {video.doctorName} &middot; {video.degree}
-            {video.specialization ? ` · ${video.specialization}` : ""}
+            {video.doctorName} &middot; {video.credentials}
+            {video.zone ? ` · ${video.zone}` : ""}
           </p>
           {video.description && <p className="mt-3 text-sm leading-relaxed text-slate-600">{video.description}</p>}
         </div>
@@ -188,7 +188,11 @@ export default function WatchVideo() {
 
         <div className="mt-10 flex items-center justify-center gap-1.5 text-xs text-slate-400">
           <Play size={12} fill="currentColor" />
-          Powered by {brand.name}
+          Powered by {brand.poweredBy}
+        </div>
+        <div className="text-xs text-center mt-2 flex gap-4 justify-center  text-slate-400">
+          <telphone> &bull; +917021333878</telphone>
+          <p> &bull; raghuboyar6@gmail.com</p>
         </div>
       </main>
     </div>

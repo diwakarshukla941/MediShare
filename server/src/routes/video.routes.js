@@ -6,8 +6,10 @@ import {
   exportVideos,
   listVideos,
   getPublicVideo,
+  getPublicVideoStatus,
   updateVideo,
   deleteVideo,
+  bulkDeleteVideos,
   incrementShare,
   getStats,
   trackWatch,
@@ -24,6 +26,7 @@ const router = Router();
 // sends a Bearer token so optionalAuth can tag the video with source "dashboard"
 // (requirePermission no-ops for anonymous/public requests, only gates logged-in admins)
 router.post("/", publicUploadLimiter, optionalAuth, requirePermission("videos:upload"), uploadSingleVideo, createVideo);
+router.get("/public/:slug/status", getPublicVideoStatus);
 router.get("/public/:slug", getPublicVideo);
 router.post("/:id/share", incrementShare);
 router.post("/:id/track-watch", trackLimiter, trackWatch);
@@ -35,6 +38,7 @@ router.get("/export", requireAuth, requirePermission("videos:view"), exportVideo
 // Dashboard (auth required)
 router.get("/", requireAuth, requirePermission("videos:view"), listVideos);
 router.post("/bulk", requireAuth, requireSuperAdmin, uploadBulk, bulkCreateVideos);
+router.delete("/bulk", requireAuth, requireSuperAdmin, bulkDeleteVideos);
 router.get("/:id", requireAuth, requirePermission("videos:view"), getVideo);
 router.patch("/:id", requireAuth, requirePermission("videos:view"), updateVideo);
 router.delete("/:id", requireAuth, requirePermission("videos:view"), deleteVideo);

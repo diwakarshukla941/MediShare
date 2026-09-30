@@ -20,6 +20,8 @@ import ContentTemplates from "./pages/dashboard/frames/ContentTemplates.jsx";
 import Analytics from "./pages/dashboard/Analytics.jsx";
 import Settings from "./pages/dashboard/Settings.jsx";
 import Team from "./pages/dashboard/Team.jsx";
+import Zones from "./pages/dashboard/Zones.jsx";
+import StorageSettings from "./pages/dashboard/StorageSettings.jsx";
 
 export default function App() {
   return (
@@ -82,6 +84,8 @@ export default function App() {
             }
           />
           <Route path="settings" element={<Settings />} />
+          <Route path="zones" element={<RequireSuperAdmin><Zones /></RequireSuperAdmin>} />
+          <Route path="storage" element={<RequireSuperAdmin><StorageSettings /></RequireSuperAdmin>} />
           <Route
             path="team"
             element={
