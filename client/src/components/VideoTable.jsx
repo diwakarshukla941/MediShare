@@ -17,7 +17,7 @@ export default function VideoTable({ videos, onChanged, compact = false, selecta
   const [downloadingId, setDownloadingId] = useState(null);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [deletingSelected, setDeletingSelected] = useState(false);
-  const isProcessing = (video) => video.renderingStatus === "processing";
+  const isProcessing = () => false;
 
   useEffect(() => {
     if (!videos.some(isProcessing)) return undefined;

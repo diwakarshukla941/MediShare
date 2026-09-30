@@ -26,7 +26,7 @@ const videoSchema = new mongoose.Schema(
     fileName: { type: String, required: true },
     fileSize: { type: Number, default: 0 },
     duration: { type: Number, default: 0 },
-    renderingStatus: { type: String, enum: ["processing", "completed", "failed"], default: "processing", index: true },
+    renderingStatus: { type: String, enum: ["processing", "completed", "failed"], default: "completed", index: true },
     renderingError: { type: String, default: "" },
 
     slug: { type: String, required: true, unique: true, index: true, default: () => nanoid(10) },

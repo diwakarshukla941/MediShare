@@ -129,7 +129,7 @@ export default function FrameDesigner() {
         width: dims.width,
         height: dims.height,
         aspectRatio: "custom",
-        background: { type: "image", value: res.url, imagekitFileId: res.fileId },
+        background: { type: "image", value: res.url, fileId: res.fileId },
         elements: starterElements(canvas),
       });
       toast.success("Frame image uploaded — drag the Video Area onto the opening in your design", { id: toastId });

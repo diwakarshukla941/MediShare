@@ -19,20 +19,27 @@ services:
         sync: false
       - key: JWT_SECRET
         generateValue: true
+      # Use the same value on both APIs because they share the MongoDB storage config.
+      - key: STORAGE_CONFIG_ENCRYPTION_KEY
+        sync: false
       - key: ADMIN_NAME
         sync: false
       - key: ADMIN_EMAIL
         sync: false
       - key: ADMIN_PASSWORD
         sync: false
-      - key: IMAGEKIT_PUBLIC_KEY
+      - key: CLOUDFLARE_ACCOUNT_ID
         sync: false
-      - key: IMAGEKIT_PRIVATE_KEY
+      - key: CLOUDFLARE_ACCESS_KEY_ID
         sync: false
-      - key: IMAGEKIT_URL_ENDPOINT
+      - key: CLOUDFLARE_SECRET_ACCESS_KEY
         sync: false
-      - key: IMAGEKIT_FOLDER_PREFIX
-        value: /medishare
+      - key: CLOUDFLARE_BUCKET_NAME
+        sync: false
+      - key: CLOUDFLARE_PUBLIC_DOMAIN
+        sync: false
+      - key: CLOUDFLARE_FOLDER_PREFIX
+        value: bonconnect
       - key: CLIENT_URL
         sync: false
 
@@ -73,20 +80,27 @@ services:
         sync: false
       - key: JWT_SECRET
         generateValue: true
+      # Must match the production API's value while both environments share MongoDB.
+      - key: STORAGE_CONFIG_ENCRYPTION_KEY
+        sync: false
       - key: ADMIN_NAME
         sync: false
       - key: ADMIN_EMAIL
         sync: false
       - key: ADMIN_PASSWORD
         sync: false
-      - key: IMAGEKIT_PUBLIC_KEY
+      - key: CLOUDFLARE_ACCOUNT_ID
         sync: false
-      - key: IMAGEKIT_PRIVATE_KEY
+      - key: CLOUDFLARE_ACCESS_KEY_ID
         sync: false
-      - key: IMAGEKIT_URL_ENDPOINT
+      - key: CLOUDFLARE_SECRET_ACCESS_KEY
         sync: false
-      - key: IMAGEKIT_FOLDER_PREFIX
-        value: /medishare-staging
+      - key: CLOUDFLARE_BUCKET_NAME
+        sync: false
+      - key: CLOUDFLARE_PUBLIC_DOMAIN
+        sync: false
+      - key: CLOUDFLARE_FOLDER_PREFIX
+        value: bonconnect
       - key: CLIENT_URL
         sync: false
 

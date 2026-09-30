@@ -53,7 +53,7 @@ export default function BulkUpload() {
     const url = URL.createObjectURL(data);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "medishare-bulk-upload-sample.csv";
+    a.download = "bonconnect-bulk-upload-sample.csv";
     a.click();
     URL.revokeObjectURL(url);
   };

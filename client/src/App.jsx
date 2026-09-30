@@ -16,7 +16,6 @@ import UploadSingle from "./pages/dashboard/UploadSingle.jsx";
 import BulkUpload from "./pages/dashboard/BulkUpload.jsx";
 import FramesList from "./pages/dashboard/frames/FramesList.jsx";
 import FrameDesigner from "./pages/dashboard/frames/FrameDesigner.jsx";
-import ContentTemplates from "./pages/dashboard/frames/ContentTemplates.jsx";
 import Analytics from "./pages/dashboard/Analytics.jsx";
 import Settings from "./pages/dashboard/Settings.jsx";
 import Team from "./pages/dashboard/Team.jsx";
@@ -107,16 +106,7 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/dashboard/frame-studio-1845fd3e26ad/content-templates"
-          element={
-            <ProtectedRoute>
-              <RequirePermission permission="content_templates:manage">
-                <ContentTemplates />
-              </RequirePermission>
-            </ProtectedRoute>
-          }
-        />
+
         <Route
           path="/dashboard/frame-studio-1845fd3e26ad/:frameId"
           element={

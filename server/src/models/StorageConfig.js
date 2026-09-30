@@ -5,7 +5,7 @@ import mongoose from "mongoose";
 const storageConfigSchema = new mongoose.Schema(
   {
     key: { type: String, default: "primary", unique: true },
-    provider: { type: String, enum: ["imagekit", "r2", "gcs"], default: "imagekit" },
+    provider: { type: String, enum: ["r2"], default: "r2" },
     encryptedConfig: { type: String, default: "" },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "Admin", default: null },
   },

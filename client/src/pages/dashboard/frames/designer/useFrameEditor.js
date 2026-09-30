@@ -8,7 +8,7 @@ const emptyFrame = (canvas) => ({
   width: canvas.width,
   height: canvas.height,
   aspectRatio: canvas.id || "custom",
-  background: { type: "color", value: "#eef2ff", imagekitFileId: "" },
+  background: { type: "color", value: "#eef2ff", fileId: "" },
   elements: [],
 });
 

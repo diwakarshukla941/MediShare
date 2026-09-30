@@ -78,8 +78,8 @@ export const deleteFrame = asyncHandler(async (req, res) => {
     });
   }
 
-  if (frame.background?.imagekitFileId) {
-    await deleteStoredFile(frame.background.imagekitFileId, frame.background.storageProvider);
+  if (frame.background?.fileId) {
+    await deleteStoredFile(frame.background.fileId);
   }
 
   await frame.deleteOne();
@@ -173,6 +173,6 @@ export const burnExistingVideos = asyncHandler(async (req, res) => {
 export const uploadFrameAsset = asyncHandler(async (req, res) => {
   if (!req.file) throw new ApiError(400, "An image file is required");
 
-  const uploaded = await uploadVideo(req.file, "frame-assets");
-  res.json({ url: uploaded.url, fileId: uploaded.fileId, provider: uploaded.provider });
+  const uploaded = await uploadVideo(req.file, "frames");
+  res.json({ url: uploaded.url, fileId: uploaded.fileId });
 });

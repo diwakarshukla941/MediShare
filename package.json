@@ -11,6 +11,7 @@
     "seed": "npm run seed -w server",
     "cleanup:doctor-emails": "npm run cleanup:doctor-emails -w server",
     "migrate:phase1": "npm run migrate:phase1 -w server",
+    "migrate:frame-assets:r2": "npm run migrate:frame-assets:r2 -w server",
     "build": "npm run build -w client",
     "lint": "npm run lint -w client"
   },

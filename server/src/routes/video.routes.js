@@ -19,6 +19,7 @@ import {
 import { requireAuth, optionalAuth, requirePermission, requireSuperAdmin } from "../middleware/auth.middleware.js";
 import { uploadSingleVideo, uploadBulk } from "../middleware/upload.middleware.js";
 import { publicUploadLimiter, trackLimiter, downloadLimiter } from "../middleware/rateLimiter.js";
+import { createBulkDownload, getBulkDownloadStatus } from "../controllers/bulkDownload.controller.js";
 
 const router = Router();
 
@@ -34,6 +35,8 @@ router.get("/:id/download", downloadLimiter, getFramedDownload);
 router.get("/stats", requireAuth, requirePermission("videos:view"), getStats);
 router.get("/sample-csv", requireAuth, requireSuperAdmin, getSampleCsv);
 router.get("/export", requireAuth, requirePermission("videos:view"), exportVideos);
+router.post("/bulk-download", requireAuth, requireSuperAdmin, createBulkDownload);
+router.get("/bulk-download/:jobId", requireAuth, requireSuperAdmin, getBulkDownloadStatus);
 
 // Dashboard (auth required)
 router.get("/", requireAuth, requirePermission("videos:view"), listVideos);
