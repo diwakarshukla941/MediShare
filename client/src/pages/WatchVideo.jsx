@@ -58,6 +58,7 @@ export default function WatchVideo() {
             videoUrl: data.videoUrl || current.videoUrl,
             thumbnailUrl: data.thumbnailUrl || current.thumbnailUrl,
             frameBakedId: data.frameBakedId || current.frameBakedId,
+            frameBakedVersion: data.frameBakedVersion || current.frameBakedVersion,
           }));
           return;
         }
@@ -170,6 +171,7 @@ export default function WatchVideo() {
   const hasMatchingBakedFrame = Boolean(
     video.frameBakedId && frame && String(video.frameBakedId) === String(frame._id)
   );
+  const needsLegacyDynamicTextOverlay = hasMatchingBakedFrame && !video.frameBakedVersion;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -202,7 +204,7 @@ export default function WatchVideo() {
           )}
           {/* Older baked videos may have blank variable fields. Overlay only
               those fields when this exact frame was baked into the file. */}
-          {hasMatchingBakedFrame ? (
+          {needsLegacyDynamicTextOverlay ? (
             <div className="relative mx-auto w-full overflow-hidden rounded-2xl bg-black shadow-lg" style={{ aspectRatio: `${frame.width} / ${frame.height}` }}>
               <video ref={videoRef} src={video.videoUrl} poster={video.thumbnailUrl || undefined} playsInline className="block h-full w-full bg-black object-contain" />
               <FrameRenderer frame={frame} video={video} dynamicTextOnly />
