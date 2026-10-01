@@ -229,21 +229,6 @@ export async function resumeProcessingVideos() {
   return pending.length;
 }
 
-export async function findStaleProcessingVideoIds() {
-  const staleBefore = new Date(Date.now() - 3 * 60_000);
-  const now = new Date();
-  const videos = await Video.find({
-    renderingStatus: "processing",
-    updatedAt: { $lte: staleBefore },
-    $or: [
-      { renderLeaseUntil: null },
-      { renderLeaseUntil: { $exists: false } },
-      { renderLeaseUntil: { $lte: now } },
-    ],
-  }).sort({ updatedAt: 1 }).limit(100).select("_id").lean();
-  return videos.map((video) => String(video._id));
-}
-
 export const createVideo = asyncHandler(async (req, res) => {
   if (!req.file) {
     throw new ApiError(400, "A video file is required");

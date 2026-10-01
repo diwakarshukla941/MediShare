@@ -3,15 +3,16 @@ import { waitForVideoRender } from "./videoProcessing.js";
 
 const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-async function completeUpload(uploadToken) {
+async function completeUpload(uploadToken, onStatus) {
   for (let attempt = 0; ; attempt += 1) {
     try {
       return await api.post("/videos/complete-upload", { uploadToken });
     } catch (error) {
       const status = error?.response?.status;
       const retryable = !status || status === 429 || status >= 500;
-      if (!retryable || attempt >= 3) throw error;
-      await wait(1000 * (2 ** attempt));
+      if (!retryable || attempt >= 8) throw error;
+      onStatus?.("Your video is safely uploaded. Retrying confirmation and frame scheduling...");
+      await wait(Math.min(1000 * (2 ** attempt), 15000));
     }
   }
 }
@@ -55,7 +56,7 @@ export async function uploadVideoDirect(file, metadata, onProgress, { waitForRen
     }
   }
   onStatus?.("Upload saved. Confirming it with the server...");
-  const { data } = await completeUpload(intent.uploadToken);
+  const { data } = await completeUpload(intent.uploadToken, onStatus);
   if (waitForRender && data.slug && data.video?.renderingStatus !== "completed") {
     await waitForVideoRender(data.slug, onStatus);
   }
