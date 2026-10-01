@@ -4,7 +4,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { frameCreateSchema, frameUpdateSchema } from "../validators/frame.validator.js";
 import { uploadVideo, deleteStoredFile } from "../storage/provider.js";
-import { burnFrameToTempFile } from "../utils/composeFramedVideo.js";
+import { burnFrameToTempFile, frameVersion } from "../utils/composeFramedVideo.js";
 import { enqueueBurn } from "../utils/burnQueue.js";
 import { AVAILABLE_VARIABLES } from "../utils/resolveVariables.js";
 
@@ -156,6 +156,7 @@ export const burnExistingVideos = asyncHandler(async (req, res) => {
       video.fileName = uploaded.name;
       video.fileSize = uploaded.size;
       video.frameBakedId = frame._id;
+      video.frameBakedVersion = frameVersion(frame);
       await video.save();
 
       deleteStoredFile(oldFileId, video.storageProvider).catch(() => {});

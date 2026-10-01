@@ -39,6 +39,9 @@ const videoSchema = new mongoose.Schema(
     // already present in its pixels. Replacing a frame never destroys the
     // source.
     frameBakedId: { type: mongoose.Schema.Types.ObjectId, ref: "Frame", default: null },
+    // Renderer revision used for the current baked frame. Empty for older
+    // records so their first post-upgrade download can rebuild from source.
+    frameBakedVersion: { type: String, default: "" },
 
     // A one-time-rendered, reusable copy for downloads of an UNBAKED video
     // (frameBakedId null) — the first download for a given video+frame pair

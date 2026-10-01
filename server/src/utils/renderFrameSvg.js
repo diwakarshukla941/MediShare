@@ -83,7 +83,7 @@ function renderTextElement(el, video) {
   return `
     <g opacity="${el.opacity ?? 1}"${rotateTransform(el)}>
       ${bg}
-      <text font-family="${escapeXml(el.fontFamily || "Arial, sans-serif")}" font-size="${fontSize}"
+      <text font-family="${escapeXml(el.fontFamily || "Arial")}, Liberation Sans, Noto Sans, sans-serif" font-size="${fontSize}"
         font-weight="${el.fontWeight || 400}" fill="${el.color || "#111827"}" text-anchor="${anchor}"
         letter-spacing="${el.letterSpacing || 0}">${tspans}</text>
       ${border}
