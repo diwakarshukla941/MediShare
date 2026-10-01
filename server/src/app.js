@@ -1,4 +1,5 @@
 import express from "express";
+import crypto from "node:crypto";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
@@ -12,6 +13,7 @@ import roleRoutes from "./routes/role.routes.js";
 import zoneRoutes from "./routes/zone.routes.js";
 import storageConfigRoutes from "./routes/storageConfig.routes.js";
 import { notFoundHandler, errorHandler } from "./middleware/error.middleware.js";
+import { processVideoRenderJob } from "./controllers/video.controller.js";
 
 export function createApp() {
   const app = express();
@@ -28,8 +30,7 @@ export function createApp() {
   app.use(helmet({ crossOriginResourcePolicy: false }));
   app.use(
     cors({
-      origin: process.env.CLIENT_URL || "http://localhost:5173",
-      credentials: true,
+      origin: "*",
     })
   );
   app.use(express.json({ limit: "2mb" }));
@@ -40,6 +41,19 @@ export function createApp() {
   }
 
   app.get("/api/health", (req, res) => res.json({ status: "ok", environment: process.env.APP_ENV || "development" }));
+  app.post("/_internal/render", async (req, res, next) => {
+    const supplied = Buffer.from(String(req.headers["x-render-secret"] || ""));
+    const expected = Buffer.from(String(process.env.JWT_SECRET || ""));
+    if (!expected.length || supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) {
+      return res.status(404).end();
+    }
+    try {
+      const result = await processVideoRenderJob(String(req.body?.videoId || ""));
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  });
   app.use("/api/auth", authRoutes);
   app.use("/api/videos", videoRoutes);
   app.use("/api/analytics", analyticsRoutes);

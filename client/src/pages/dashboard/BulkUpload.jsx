@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import Topbar from "../../components/dashboard/Topbar.jsx";
 import { api, getErrorMessage } from "../../lib/api.js";
 import { parseSheetFile, isVideoFile } from "../../lib/parseSheet.js";
+import { uploadVideoDirect } from "../../lib/directVideoUpload.js";
 
 export default function BulkUpload() {
   const [folderFiles, setFolderFiles] = useState([]);
@@ -72,24 +73,43 @@ export default function BulkUpload() {
       return;
     }
 
-    const data = new FormData();
-    preview.matched.forEach(({ file }) => data.append("videos", file));
-    data.append("sheet", sheetFile);
-
     setUploading(true);
     setProgress(0);
     setResult(null);
     try {
-      const { data: res } = await api.post("/videos/bulk", data, {
-        onUploadProgress: (evt) => setProgress(Math.round((evt.loaded * 100) / evt.total)),
-      });
+      const created = [];
+      const errors = [];
+      const totalBytes = preview.matched.reduce((sum, item) => sum + item.file.size, 0);
+      let completedBytes = 0;
+      for (const { row, file } of preview.matched) {
+        try {
+          const response = await uploadVideoDirect(file, {
+            doctorName: row.doctorname,
+            credentials: row.credentials,
+            empId: row.empid,
+            zone: row.zone,
+            phone: row.phone,
+          }, (loaded) => {
+            setProgress(Math.round(((completedBytes + loaded) * 100) / totalBytes));
+          });
+          created.push(response.video);
+        } catch (error) {
+          errors.push({ fileName: file.name, error: error.response?.data?.message || error.message || "Upload failed" });
+        }
+        completedBytes += file.size;
+        setProgress(Math.round((completedBytes * 100) / totalBytes));
+      }
+      const res = { created, errors, createdCount: created.length, errorCount: errors.length };
       setResult(res);
       if (res.createdCount > 0) toast.success(`${res.createdCount} video(s) uploaded successfully`);
       if (res.errorCount > 0) toast.error(`${res.errorCount} row(s) failed`);
-      if (res.createdCount > 0) {
+      if (res.createdCount > 0 && res.errorCount === 0) {
         setFolderFiles([]);
         setSheetFile(null);
         setPreview(null);
+      } else if (res.createdCount > 0) {
+        const failedNames = new Set(res.errors.map((item) => item.fileName.trim().toLowerCase()));
+        setFolderFiles((current) => current.filter((file) => failedNames.has(file.name.trim().toLowerCase())));
       }
     } catch (err) {
       toast.error(getErrorMessage(err));

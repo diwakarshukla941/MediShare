@@ -1,6 +1,8 @@
 import { Router } from "express";
 import {
   createVideo,
+  createVideoUploadIntent,
+  completeDirectVideoUpload,
   bulkCreateVideos,
   getSampleCsv,
   exportVideos,
@@ -27,6 +29,10 @@ const router = Router();
 // sends a Bearer token so optionalAuth can tag the video with source "dashboard"
 // (requirePermission no-ops for anonymous/public requests, only gates logged-in admins)
 router.post("/", publicUploadLimiter, optionalAuth, requirePermission("videos:upload"), uploadSingleVideo, createVideo);
+router.post("/upload-intent", publicUploadLimiter, optionalAuth, requirePermission("videos:upload"), createVideoUploadIntent);
+// Completion requires the short-lived signed token issued by /upload-intent;
+// rate-limit intent creation so public callers keep the old per-IP upload cap.
+router.post("/complete-upload", optionalAuth, requirePermission("videos:upload"), completeDirectVideoUpload);
 router.get("/public/:slug/status", getPublicVideoStatus);
 router.get("/public/:slug", getPublicVideo);
 router.post("/:id/share", incrementShare);

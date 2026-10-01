@@ -14,7 +14,7 @@ async function start() {
     const app = createApp();
     app.listen(PORT, () => {
       console.log(`MediShare API running on http://localhost:${PORT}`);
-      if (resumed) console.log(`Resumed ${resumed} unfinished video render job(s)`);
+      if (resumed) console.log(`Found ${resumed} unfinished video render job(s)`);
     });
   } catch (err) {
     console.error("Failed to start server:", err.message);

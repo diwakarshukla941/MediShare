@@ -131,6 +131,9 @@ export default function WatchVideo() {
   }
 
   const watchUrl = window.location.href;
+  const hasMatchingBakedFrame = Boolean(
+    video.frameBakedId && frame && String(video.frameBakedId) === String(frame._id)
+  );
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -150,22 +153,24 @@ export default function WatchVideo() {
 
       <main className="mx-auto max-w-2xl px-4 py-10">
         <div className="relative">
-          {/* Already has the frame burned into the pixels — no live overlay needed.
-              Without a live overlay to fill, the video sizes itself at its own
-              natural aspect ratio instead of being force-fit/cropped into 16:9. */}
-          <FrameRenderer frame={video.frameBakedId ? null : frame} video={video}>
-            <video
-              ref={videoRef}
-              src={video.videoUrl}
-              poster={video.thumbnailUrl || undefined}
-              playsInline
-              className={
-                video.frameBakedId || !frame
-                  ? "block h-auto w-full bg-black"
-                  : "h-full w-full bg-black object-cover"
-              }
-            />
-          </FrameRenderer>
+          {/* Older baked videos may have blank variable fields. Overlay only
+              those fields when this exact frame was baked into the file. */}
+          {hasMatchingBakedFrame ? (
+            <div className="relative mx-auto w-full overflow-hidden rounded-2xl bg-black shadow-lg" style={{ aspectRatio: `${frame.width} / ${frame.height}` }}>
+              <video ref={videoRef} src={video.videoUrl} poster={video.thumbnailUrl || undefined} playsInline className="block h-full w-full bg-black object-contain" />
+              <FrameRenderer frame={frame} video={video} dynamicTextOnly />
+            </div>
+          ) : (
+            <FrameRenderer frame={video.frameBakedId ? null : frame} video={video}>
+              <video
+                ref={videoRef}
+                src={video.videoUrl}
+                poster={video.thumbnailUrl || undefined}
+                playsInline
+                className={video.frameBakedId || !frame ? "block h-auto w-full bg-black" : "h-full w-full bg-black object-cover"}
+              />
+            </FrameRenderer>
+          )}
           {/* Custom bar spans the whole frame's bottom edge, not just the video
               window — the native browser controls only ever hug the <video>
               element itself, which looks disconnected on a portrait frame. */}

@@ -1,5 +1,8 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
+  // Keep this stable: the existing Container application is named from this
+  // Wrangler project name. Workers Builds overrides the deployed Worker name
+  // to bonconnect-api, but changing this would create a conflicting Container.
   "name": "medishare-api",
   "main": "src/index.js",
   "compatibility_date": "2026-09-30",
@@ -29,10 +32,30 @@
       "new_sqlite_classes": ["MediShareApiContainer"]
     }
   ],
+  "queues": {
+    "producers": [
+      { "binding": "VIDEO_RENDER_QUEUE", "queue": "bonconnect-video-renders" }
+    ],
+    "consumers": [
+      {
+        "queue": "bonconnect-video-renders",
+        "max_batch_size": 1,
+        "max_retries": 5,
+        "retry_delay": 30,
+        "dead_letter_queue": "bonconnect-video-renders-dlq",
+        "max_concurrency": 1
+      }
+    ]
+  },
   "vars": {
     "NODE_ENV": "production",
     "APP_ENV": "production",
+    "CLOUDFLARE_ACCOUNT_ID": "a00db16a53412617d89b6983cde39c77",
+    "CLOUDFLARE_BUCKET_NAME": "bonconnect",
+    "CLOUDFLARE_FOLDER_PREFIX": "bonconnect/bonconnect",
+    "CLOUDFLARE_PUBLIC_DOMAIN": "https://pub-b5bae363a92d425b912bb87c8180ed24.r2.dev",
     "PORT": "8080",
-    "JWT_EXPIRES_IN": "7d"
+    "JWT_EXPIRES_IN": "7d",
+    "RENDER_JOBS_VIA_CLOUDFLARE_QUEUE": "true"
   }
 }

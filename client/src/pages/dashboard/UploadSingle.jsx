@@ -4,7 +4,8 @@ import toast from "react-hot-toast";
 import Topbar from "../../components/dashboard/Topbar.jsx";
 import VideoDropzone from "../../components/VideoDropzone.jsx";
 import ZoneField from "../../components/ZoneField.jsx";
-import { api, getErrorMessage } from "../../lib/api.js";
+import { getErrorMessage } from "../../lib/api.js";
+import { uploadVideoDirect } from "../../lib/directVideoUpload.js";
 
 const initialForm = {
   doctorName: "",
@@ -30,16 +31,10 @@ export default function UploadSingle() {
       return;
     }
 
-    const data = new FormData();
-    data.append("video", file);
-    Object.entries(form).forEach(([k, v]) => data.append(k, v));
-
     setUploading(true);
     setProgress(0);
     try {
-      await api.post("/videos", data, {
-        onUploadProgress: (evt) => setProgress(Math.round((evt.loaded * 100) / evt.total)),
-      });
+      await uploadVideoDirect(file, form, (loaded, total) => setProgress(Math.round((loaded * 100) / total)));
       toast.success("Video uploaded successfully");
       navigate("/dashboard/videos");
     } catch (err) {
