@@ -226,7 +226,10 @@ export default function BulkUpload() {
               <div className="card flex items-start gap-3 border-green-100 bg-green-50 p-4">
                 <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-green-600" />
                 <div>
-                  <p className="text-sm font-semibold text-green-800">{result.created.length} video(s) uploaded</p>
+                  <p className="text-sm font-semibold text-green-800">
+                    {result.created.length} video(s) uploaded
+                    {result.created.some((video) => video.renderingStatus === "processing") && "; frame preparation continues in the background"}
+                  </p>
                   <ul className="mt-1 space-y-0.5 text-xs text-green-700">
                     {result.created.map((v) => (
                       <li key={v._id}>{v.title || v.fileName} — {v.doctorName}</li>

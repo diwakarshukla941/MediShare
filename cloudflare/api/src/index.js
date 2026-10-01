@@ -13,8 +13,36 @@ async function renderVideo(env, videoId) {
   return response.json();
 }
 
+const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+async function enqueueRenderWithRetry(queue, videoId) {
+  let lastError;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    try {
+      await queue.send({ videoId });
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) await wait(250 * (2 ** attempt));
+    }
+  }
+  throw lastError;
+}
+
+function queueUnavailableResponse(response) {
+  const headers = new Headers(response.headers);
+  headers.delete("content-length");
+  headers.delete("content-encoding");
+  headers.set("content-type", "application/json; charset=utf-8");
+  headers.set("retry-after", "2");
+  return new Response(JSON.stringify({
+    message: "Your upload is saved. We’re reconnecting to the video processing queue and will retry automatically.",
+    code: "RENDER_QUEUE_UNAVAILABLE",
+  }), { status: 503, headers });
+}
+
 async function enqueueResponseRender(request, env, response) {
-  if (!response.ok || !env.VIDEO_RENDER_QUEUE) return response;
+  if (!response.ok) return response;
   const url = new URL(request.url);
   const isUploadCompletion = request.method === "POST" && url.pathname === "/api/videos/complete-upload";
   const isVideoUpdate = request.method === "PATCH" && /^\/api\/videos\/[^/]+$/.test(url.pathname);
@@ -22,11 +50,15 @@ async function enqueueResponseRender(request, env, response) {
   try {
     const data = await response.clone().json();
     const video = data.video;
-    if (video?.renderingStatus === "processing") await env.VIDEO_RENDER_QUEUE.send({ videoId: video._id });
+    if (video?.renderingStatus !== "processing") return response;
+    if (!env.VIDEO_RENDER_QUEUE) {
+      console.error("Cannot enqueue video render: VIDEO_RENDER_QUEUE binding is missing");
+      return queueUnavailableResponse(response);
+    }
+    await enqueueRenderWithRetry(env.VIDEO_RENDER_QUEUE, video._id);
   } catch (error) {
-    // Queue publication is best-effort here so a successful R2 upload remains
-    // usable. Queue delivery itself is durable once Cloudflare accepts it.
     console.error("Could not enqueue video render immediately:", error.message);
+    return queueUnavailableResponse(response);
   }
   return response;
 }

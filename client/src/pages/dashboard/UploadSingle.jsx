@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
 import Topbar from "../../components/dashboard/Topbar.jsx";
 import VideoDropzone from "../../components/VideoDropzone.jsx";
@@ -21,6 +22,7 @@ export default function UploadSingle() {
   const [form, setForm] = useState(initialForm);
   const [progress, setProgress] = useState(0);
   const [uploading, setUploading] = useState(false);
+  const [phase, setPhase] = useState("");
 
   const update = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
@@ -33,12 +35,18 @@ export default function UploadSingle() {
 
     setUploading(true);
     setProgress(0);
+    setPhase("Uploading your video to secure storage...");
     try {
-      await uploadVideoDirect(file, form, (loaded, total) => setProgress(Math.round((loaded * 100) / total)));
-      toast.success("Video uploaded successfully");
+      await uploadVideoDirect(file, form, (loaded, total) => setProgress(Math.round((loaded * 100) / total)), {
+        waitForRender: true,
+        onStatus: setPhase,
+      });
+      toast.success("Video uploaded and framed successfully");
       navigate("/dashboard/videos");
     } catch (err) {
-      toast.error(getErrorMessage(err));
+      toast.error(err.code === "VIDEO_RENDER_FAILED"
+        ? `The upload is safe, but the frame could not be prepared: ${err.message}`
+        : getErrorMessage(err));
     } finally {
       setUploading(false);
     }
@@ -93,15 +101,19 @@ export default function UploadSingle() {
 
           {uploading && (
             <div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-                <div className="h-full bg-brand-600 transition-all" style={{ width: `${progress}%` }} />
-              </div>
-              <p className="mt-1.5 text-xs text-slate-500">Uploading... {progress}%</p>
+              {progress < 100 ? (
+                <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                  <div className="h-full bg-brand-600 transition-all" style={{ width: `${progress}%` }} />
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-brand-700"><Loader2 size={16} className="animate-spin" /><div className="h-2 flex-1 animate-pulse rounded-full bg-brand-100" /></div>
+              )}
+              <p className="mt-1.5 text-xs text-slate-500">{phase || `Uploading... ${progress}%`}</p>
             </div>
           )}
 
           <button type="submit" className="btn-primary w-full" disabled={uploading}>
-            {uploading ? "Uploading..." : "Upload Video"}
+            {uploading ? (progress >= 100 ? "Preparing framed video..." : "Uploading...") : "Upload Video"}
           </button>
         </form>
       </div>
