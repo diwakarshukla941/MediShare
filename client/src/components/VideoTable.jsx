@@ -17,7 +17,7 @@ export default function VideoTable({ videos, onChanged, compact = false, selecta
   const [downloadingId, setDownloadingId] = useState(null);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [deletingSelected, setDeletingSelected] = useState(false);
-  const isProcessing = () => false;
+  const isProcessing = (video) => video?.renderingStatus === "processing";
 
   useEffect(() => {
     if (!videos.some(isProcessing)) return undefined;
@@ -31,7 +31,10 @@ export default function VideoTable({ videos, onChanged, compact = false, selecta
     setDownloadingId(video._id);
     const toastId = toast.loading("Preparing download...");
     try {
-      await downloadFramedVideo(video._id, `${video.doctorName || "video"}.mp4`);
+      await downloadFramedVideo(video._id, {
+        slug: video.slug,
+        onStatus: (message) => toast.loading(message, { id: toastId }),
+      });
       toast.success("Download ready", { id: toastId });
     } catch (err) {
       toast.error(await getDownloadErrorMessage(err), { id: toastId });
@@ -196,12 +199,12 @@ export default function VideoTable({ videos, onChanged, compact = false, selecta
                       <Share2 size={16} />
                     </button>
                     <button
-                      title={downloadingId === video._id ? "Preparing download..." : "Download"}
+                      title={isProcessing(video) ? "Framed video is processing" : downloadingId === video._id ? "Preparing download..." : "Download"}
                       onClick={() => downloadFramed(video)}
                       disabled={downloadingId === video._id || isProcessing(video)}
                       className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
                     >
-                      {downloadingId === video._id ? (
+                      {downloadingId === video._id || isProcessing(video) ? (
                         <Loader2 size={16} className="animate-spin" />
                       ) : (
                         <Download size={16} />

@@ -462,9 +462,19 @@ export const getPublicVideo = asyncHandler(async (req, res) => {
 });
 
 export const getPublicVideoStatus = asyncHandler(async (req, res) => {
-  const video = await Video.findOne({ slug: req.params.slug }).select("renderingStatus renderingError");
+  const video = await Video.findOne({ slug: req.params.slug }).select("renderingStatus renderingError videoUrl thumbnailUrl frameBakedId");
   if (!video) throw new ApiError(404, "Video not found");
-  res.json({ renderingStatus: video.renderingStatus, renderingError: video.renderingError });
+  // Keep render internals private on the public watch page. Once the burn is
+  // complete, return the stored framed asset so the player can switch to it.
+  res.json({
+    renderingStatus: video.renderingStatus,
+    renderingError: video.renderingStatus === "failed" ? "The framed video could not be prepared. Please contact the administrator." : "",
+    ...(video.renderingStatus === "completed" ? {
+      videoUrl: video.videoUrl,
+      thumbnailUrl: video.thumbnailUrl,
+      frameBakedId: video.frameBakedId,
+    } : {}),
+  });
 });
 
 export const trackWatch = asyncHandler(async (req, res) => {
@@ -582,7 +592,13 @@ export const getFramedDownload = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Video not found");
   }
 
-  if (video.renderingStatus !== "completed") throw new ApiError(425, "This video is still being processed");
+  if (video.renderingStatus === "failed") {
+    throw new ApiError(500, "The framed video could not be prepared. Please contact the administrator.");
+  }
+  if (video.renderingStatus === "processing") {
+    res.setHeader("Retry-After", "5");
+    return res.status(202).json({ status: "processing", message: "Your framed video is being prepared." });
+  }
 
   const frame = await getActiveFrame();
   const filename = `${video.doctorName || "video"}.mp4`;
