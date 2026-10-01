@@ -48,6 +48,7 @@ async function burnActiveFrameOnSave(video) {
     video.fileName = uploaded.name;
     video.fileSize = uploaded.size;
     video.frameBakedId = frame._id;
+    video.frameBakedVersion = frameVersion(frame);
     video.renderingStatus = "completed";
     video.renderingError = "";
     await video.save();
@@ -496,6 +497,68 @@ export const trackWatch = asyncHandler(async (req, res) => {
   res.status(204).end();
 });
 
+async function rebuildOutdatedBakedVideo(video, frame) {
+  // Atomically claim a legacy render so simultaneous download clicks don't
+  // create multiple full-size FFmpeg jobs or race while replacing its asset.
+  const claimed = await Video.findOneAndUpdate({
+    _id: video._id,
+    renderingStatus: "completed",
+    frameBakedId: frame._id,
+    frameBakedVersion: { $ne: frameVersion(frame) },
+  }, {
+    $set: {
+      renderingStatus: "processing",
+      renderingError: "",
+      renderLeaseUntil: new Date(Date.now() + 10 * 60_000),
+    },
+  }, { new: true });
+  if (!claimed) return null;
+
+  let burned;
+  try {
+    const sourceUrl = await getRenderableUrl(
+      claimed.sourceVideoUrl || claimed.videoUrl,
+      claimed.sourceFileId || claimed.imagekitFileId,
+      claimed.sourceStorageProvider || claimed.storageProvider,
+    );
+    burned = await enqueueBurn(() => burnFrameToTempFile(sourceUrl, frame, claimed));
+    const uploaded = await uploadVideo({
+      path: burned.path,
+      originalname: `${claimed.slug}-framed.mp4`,
+      mimetype: "video/mp4",
+    });
+
+    const previousBakedFileId = claimed.imagekitFileId;
+    const previousProvider = claimed.storageProvider;
+    claimed.videoUrl = uploaded.url;
+    claimed.thumbnailUrl = uploaded.thumbnailUrl || claimed.thumbnailUrl;
+    claimed.imagekitFileId = uploaded.fileId;
+    claimed.storageProvider = uploaded.provider;
+    claimed.fileName = uploaded.name;
+    claimed.fileSize = uploaded.size;
+    claimed.frameBakedVersion = frameVersion(frame);
+    claimed.renderingStatus = "completed";
+    claimed.renderingError = "";
+    claimed.renderLeaseUntil = null;
+    await claimed.save();
+
+    if (previousBakedFileId && previousBakedFileId !== claimed.sourceFileId) {
+      await deleteStoredFile(previousBakedFileId, previousProvider).catch((error) => {
+        console.error("Old framed video cleanup failed:", error.message);
+      });
+    }
+    return claimed;
+  } catch (error) {
+    claimed.renderingStatus = "failed";
+    claimed.renderingError = (error.message || "Could not rebuild the framed video").slice(0, 500);
+    claimed.renderLeaseUntil = null;
+    await claimed.save();
+    throw error;
+  } finally {
+    await burned?.cleanup();
+  }
+}
+
 export const updateVideo = asyncHandler(async (req, res) => {
   const updates = videoUpdateSchema.parse(req.body);
   if (updates.zone) await assertValidZone(updates.zone);
@@ -610,6 +673,16 @@ export const getFramedDownload = asyncHandler(async (req, res) => {
   const bakedFrameMatches = video.frameBakedId && String(video.frameBakedId) === String(frame._id);
   if (video.frameBakedId && !bakedFrameMatches) {
     const downloadUrl = await getVideoDownloadUrl(video.videoUrl, video.imagekitFileId, video.storageProvider, filename);
+    return res.json({ downloadUrl });
+  }
+
+  if (bakedFrameMatches && video.frameBakedVersion !== frameVersion(frame) && video.sourceVideoUrl) {
+    const rebuilt = await rebuildOutdatedBakedVideo(video, frame);
+    if (!rebuilt) {
+      res.setHeader("Retry-After", "5");
+      return res.status(202).json({ status: "processing", message: "Your framed video is being refreshed for download." });
+    }
+    const downloadUrl = await getVideoDownloadUrl(rebuilt.videoUrl, rebuilt.imagekitFileId, rebuilt.storageProvider, filename);
     return res.json({ downloadUrl });
   }
 

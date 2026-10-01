@@ -9,13 +9,17 @@ import { buildFrameOverlaySvg } from "./renderFrameSvg.js";
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 
+// Bump this whenever SVG rasterization changes in a way that should invalidate
+// previously rendered frame files (for example, the container font set).
+export const FRAME_RENDERER_VERSION = "2";
+
 // Identifies a specific frame design at a specific point in time — changes
 // whenever the frame is edited (updatedAt) or a different frame is
 // activated (different _id). Used as the render-cache key so an unbaked
 // video's cached download is only ever reused while it still matches
 // exactly what's currently active.
 export function frameVersion(frame) {
-  return `${frame._id}-${new Date(frame.updatedAt).getTime()}`;
+  return `${frame._id}-${new Date(frame.updatedAt).getTime()}-renderer-${FRAME_RENDERER_VERSION}`;
 }
 
 async function downloadToFile(url, destPath) {
