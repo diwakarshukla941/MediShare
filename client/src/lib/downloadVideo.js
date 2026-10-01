@@ -1,20 +1,12 @@
 import { api } from "./api.js";
 
-// The download endpoint is now a plain GET that streams the file directly
-// (redirecting instantly for already-framed videos, or burning the active
-// frame in on the spot and streaming the result for everything else — see
-// server/src/controllers/video.controller.js). Fetch it as a blob and
-// trigger a normal browser save, rather than navigating to a JSON-wrapped URL.
-export async function downloadFramedVideo(videoId, filename) {
-  const response = await api.get(`/videos/${videoId}/download`, { responseType: "blob" });
-  const url = URL.createObjectURL(response.data);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+// The API prepares a short-lived download URL; the browser then downloads
+// directly from storage, avoiding a cross-origin blob fetch through R2.
+
+export async function downloadFramedVideo(videoId) {
+  const { data } = await api.get(`/videos/${videoId}/download`);
+  if (!data?.downloadUrl) throw new Error("The server did not return a download URL");
+  window.location.assign(data.downloadUrl);
 }
 
 export async function downloadVideosSpreadsheet() {

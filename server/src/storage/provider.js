@@ -140,6 +140,25 @@ export async function getRenderableUrl(url, fileId, providerName) {
   return getSignedUrl(client, new GetObjectCommand({ Bucket: c.bucket, Key: fileId }), { expiresIn: 900 });
 }
 
+export async function getVideoDownloadUrl(url, fileId, providerName, filename) {
+  const config = await getActiveStorageConfig();
+  const prefix = folderPrefix(config);
+  const key = String(fileId || "");
+  if (providerName === "r2" && key.startsWith(`${prefix}/`)) {
+    const { c, client } = r2(config);
+    const safeFilename = String(filename || "video.mp4").replace(/["\\\r\n]/g, "_");
+    return getSignedUrl(client, new GetObjectCommand({
+      Bucket: c.bucket,
+      Key: key,
+      ResponseContentDisposition: `attachment; filename="${safeFilename}"`,
+    }), { expiresIn: 15 * 60 });
+  }
+  if (!url) throw new Error("Video download URL is missing");
+  const downloadUrl = new URL(url);
+  downloadUrl.searchParams.set("ik-attachment", "true");
+  return downloadUrl.toString();
+}
+
 export async function getStoredVideoStream(url, fileId, providerName) {
   const config = await getActiveStorageConfig();
   const prefix = folderPrefix(config);

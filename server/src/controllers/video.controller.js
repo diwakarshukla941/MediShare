@@ -9,7 +9,7 @@ import { Zone } from "../models/Zone.js";
 import { AnalyticsEvent } from "../models/AnalyticsEvent.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { uploadVideo, deleteStoredFile, getRenderableUrl, createDirectVideoUpload, verifyDirectVideoUpload, promoteDirectVideoUpload } from "../storage/provider.js";
+import { uploadVideo, deleteStoredFile, getRenderableUrl, getVideoDownloadUrl, createDirectVideoUpload, verifyDirectVideoUpload, promoteDirectVideoUpload } from "../storage/provider.js";
 import { videoMetaSchema, videoUpdateSchema } from "../validators/video.validator.js";
 import { detectDevice } from "../utils/detectDevice.js";
 import { getActiveFrame } from "../models/Frame.js";
@@ -571,15 +571,11 @@ export const incrementShare = asyncHandler(async (req, res) => {
   res.json({ shareCount: video.shareCount });
 });
 
-// GET, not POST — a plain file download. If the video already has a frame
-// permanently baked in (frameBakedId) or there's no active frame to apply,
-// this just redirects straight to the stored file (instant, ImageKit serves
-// it). Otherwise it's an unbaked video: the first download for a given
-// video+frame pairing burns the frame in, uploads the result to ImageKit,
-// and remembers it (cachedRenderUrl/cachedRenderFrameVersion) so every
-// later download of that same pairing just redirects to the cached file
-// instantly instead of re-burning. Editing the video (updateVideo) or the
-// frame (its updatedAt bumps, changing frameVersion) invalidates the cache.
+// Prepare a short-lived direct download URL. R2 files use a signed GET with
+// Content-Disposition so the browser navigates directly to storage instead
+// of fetching a cross-origin redirect as a blob, which depends on R2 CORS.
+// Unbaked videos render once per active-frame version and reuse the stored
+// result for later downloads.
 export const getFramedDownload = asyncHandler(async (req, res) => {
   const video = await Video.findById(req.params.id);
   if (!video) {
@@ -589,25 +585,30 @@ export const getFramedDownload = asyncHandler(async (req, res) => {
   if (video.renderingStatus !== "completed") throw new ApiError(425, "This video is still being processed");
 
   const frame = await getActiveFrame();
+  const filename = `${video.doctorName || "video"}.mp4`;
   if (!frame) {
-    return res.redirect(`${video.videoUrl}?ik-attachment=true`);
+    const downloadUrl = await getVideoDownloadUrl(video.videoUrl, video.imagekitFileId, video.storageProvider, filename);
+    return res.json({ downloadUrl });
   }
 
   const bakedFrameMatches = video.frameBakedId && String(video.frameBakedId) === String(frame._id);
   if (video.frameBakedId && !bakedFrameMatches) {
-    return res.redirect(`${video.videoUrl}?ik-attachment=true`);
+    const downloadUrl = await getVideoDownloadUrl(video.videoUrl, video.imagekitFileId, video.storageProvider, filename);
+    return res.json({ downloadUrl });
   }
 
   const hasDynamicText = (frame.elements || []).some((el) =>
     !el.hidden && el.type === "text" && /\{\{\s*\w+\s*\}\}/.test(el.content || "")
   );
   if (bakedFrameMatches && !hasDynamicText) {
-    return res.redirect(`${video.videoUrl}?ik-attachment=true`);
+    const downloadUrl = await getVideoDownloadUrl(video.videoUrl, video.imagekitFileId, video.storageProvider, filename);
+    return res.json({ downloadUrl });
   }
 
   const currentVersion = frameVersion(frame);
   if (video.cachedRenderUrl && video.cachedRenderFrameVersion === currentVersion) {
-    return res.redirect(`${video.cachedRenderUrl}?ik-attachment=true`);
+    const downloadUrl = await getVideoDownloadUrl(video.cachedRenderUrl, video.cachedRenderImagekitFileId, video.storageProvider, filename);
+    return res.json({ downloadUrl });
   }
 
   let burned;
@@ -632,7 +633,8 @@ export const getFramedDownload = asyncHandler(async (req, res) => {
     await video.save();
     if (oldCachedFileId) deleteStoredFile(oldCachedFileId, video.storageProvider).catch(() => {});
 
-    return res.redirect(`${uploaded.url}?ik-attachment=true`);
+    const downloadUrl = await getVideoDownloadUrl(uploaded.url, uploaded.fileId, uploaded.provider, filename);
+    return res.json({ downloadUrl });
   } catch (err) {
     throw new ApiError(500, err.message || "Could not prepare your download");
   } finally {
