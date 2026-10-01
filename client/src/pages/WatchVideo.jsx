@@ -167,10 +167,6 @@ export default function WatchVideo() {
   }
 
   const watchUrl = window.location.href;
-  const hasMatchingBakedFrame = Boolean(
-    video.frameBakedId && frame && String(video.frameBakedId) === String(frame._id)
-  );
-
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4 sm:px-10">
@@ -200,24 +196,17 @@ export default function WatchVideo() {
               {renderError || "The framed version could not be prepared. Please contact the administrator."}
             </div>
           )}
-          {/* Older baked videos may have blank variable fields. Overlay only
-              those fields when this exact frame was baked into the file. */}
-          {hasMatchingBakedFrame ? (
-            <div className="relative mx-auto w-full overflow-hidden rounded-2xl bg-black shadow-lg" style={{ aspectRatio: `${frame.width} / ${frame.height}` }}>
-              <video ref={videoRef} src={video.videoUrl} poster={video.thumbnailUrl || undefined} playsInline className="block h-full w-full bg-black object-contain" />
-              <FrameRenderer frame={frame} video={video} dynamicTextOnly />
-            </div>
-          ) : (
-            <FrameRenderer frame={video.frameBakedId ? null : frame} video={video}>
-              <video
-                ref={videoRef}
-                src={video.videoUrl}
-                poster={video.thumbnailUrl || undefined}
-                playsInline
-                className={video.frameBakedId || !frame ? "block h-auto w-full bg-black" : "h-full w-full bg-black object-cover"}
-              />
-            </FrameRenderer>
-          )}
+          {/* Framed videos already contain their text and graphics in the MP4.
+              Overlaying dynamic text here duplicated it in the preview. */}
+          <FrameRenderer frame={video.frameBakedId ? null : frame} video={video}>
+            <video
+              ref={videoRef}
+              src={video.videoUrl}
+              poster={video.thumbnailUrl || undefined}
+              playsInline
+              className={video.frameBakedId || !frame ? "block h-auto w-full bg-black" : "h-full w-full bg-black object-cover"}
+            />
+          </FrameRenderer>
           {/* Custom bar spans the whole frame's bottom edge, not just the video
               window — the native browser controls only ever hug the <video>
               element itself, which looks disconnected on a portrait frame. */}

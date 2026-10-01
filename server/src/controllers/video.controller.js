@@ -463,7 +463,7 @@ export const getPublicVideo = asyncHandler(async (req, res) => {
 });
 
 export const getPublicVideoStatus = asyncHandler(async (req, res) => {
-  const video = await Video.findOne({ slug: req.params.slug }).select("renderingStatus renderingError videoUrl thumbnailUrl frameBakedId");
+  const video = await Video.findOne({ slug: req.params.slug }).select("renderingStatus renderingError videoUrl thumbnailUrl frameBakedId frameBakedVersion");
   if (!video) throw new ApiError(404, "Video not found");
   // Keep render internals private on the public watch page. Once the burn is
   // complete, return the stored framed asset so the player can switch to it.
@@ -474,6 +474,7 @@ export const getPublicVideoStatus = asyncHandler(async (req, res) => {
       videoUrl: video.videoUrl,
       thumbnailUrl: video.thumbnailUrl,
       frameBakedId: video.frameBakedId,
+      frameBakedVersion: video.frameBakedVersion,
     } : {}),
   });
 });
