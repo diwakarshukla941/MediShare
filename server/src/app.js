@@ -13,7 +13,13 @@ import roleRoutes from "./routes/role.routes.js";
 import zoneRoutes from "./routes/zone.routes.js";
 import storageConfigRoutes from "./routes/storageConfig.routes.js";
 import { notFoundHandler, errorHandler } from "./middleware/error.middleware.js";
-import { processVideoRenderJob } from "./controllers/video.controller.js";
+import { findStaleProcessingVideoIds, processVideoRenderJob } from "./controllers/video.controller.js";
+
+function hasValidRenderSecret(req) {
+  const supplied = Buffer.from(String(req.headers["x-render-secret"] || ""));
+  const expected = Buffer.from(String(process.env.JWT_SECRET || ""));
+  return expected.length > 0 && supplied.length === expected.length && crypto.timingSafeEqual(supplied, expected);
+}
 
 export function createApp() {
   const app = express();
@@ -42,14 +48,18 @@ export function createApp() {
 
   app.get("/api/health", (req, res) => res.json({ status: "ok", environment: process.env.APP_ENV || "development" }));
   app.post("/_internal/render", async (req, res, next) => {
-    const supplied = Buffer.from(String(req.headers["x-render-secret"] || ""));
-    const expected = Buffer.from(String(process.env.JWT_SECRET || ""));
-    if (!expected.length || supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) {
-      return res.status(404).end();
-    }
+    if (!hasValidRenderSecret(req)) return res.status(404).end();
     try {
       const result = await processVideoRenderJob(String(req.body?.videoId || ""));
       res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post("/_internal/render-pending", async (req, res, next) => {
+    if (!hasValidRenderSecret(req)) return res.status(404).end();
+    try {
+      res.json({ videoIds: await findStaleProcessingVideoIds() });
     } catch (error) {
       next(error);
     }

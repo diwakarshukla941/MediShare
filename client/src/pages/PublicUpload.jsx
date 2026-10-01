@@ -30,6 +30,7 @@ export default function PublicUpload() {
   const [form, setForm] = useState(initialForm);
   const [progress, setProgress] = useState(0);
   const [uploading, setUploading] = useState(false);
+  const [phase, setPhase] = useState("");
   const [result, setResult] = useState(null);
 
   // Consent
@@ -69,10 +70,14 @@ export default function PublicUpload() {
 
     setUploading(true);
     setProgress(0);
+    setPhase("Uploading your video to secure storage...");
 
     try {
       const res = await uploadVideoDirect(file, form, (loaded, total) => {
         setProgress(Math.round((loaded * 100) / total));
+      }, {
+        waitForRender: true,
+        onStatus: setPhase,
       });
 
       setResult({
@@ -80,9 +85,11 @@ export default function PublicUpload() {
         slug: res.slug,
       });
 
-      toast.success("Video uploaded successfully");
+      toast.success("Video uploaded and framed successfully");
     } catch (err) {
-      toast.error(getErrorMessage(err));
+      toast.error(err.code === "VIDEO_RENDER_FAILED"
+        ? `The upload is safe, but the frame could not be prepared: ${err.message}`
+        : getErrorMessage(err));
     } finally {
       setUploading(false);
     }
@@ -338,17 +345,16 @@ export default function PublicUpload() {
 
               {uploading && (
                 <div>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-                    <div
-                      className="h-full bg-brand-600 transition-all"
-                      style={{
-                        width: `${progress}%`,
-                      }}
-                    />
-                  </div>
+                  {progress < 100 ? (
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                      <div className="h-full bg-brand-600 transition-all" style={{ width: `${progress}%` }} />
+                    </div>
+                  ) : (
+                    <div className="h-2 w-full animate-pulse rounded-full bg-brand-100" />
+                  )}
 
                   <p className="mt-1.5 text-xs text-slate-500">
-                    Uploading... {progress}%
+                    {phase || `Uploading... ${progress}%`}
                   </p>
                 </div>
               )}
@@ -361,7 +367,7 @@ export default function PublicUpload() {
                 disabled={uploading || !hasConsent}
               >
                 {uploading
-                  ? "Uploading..."
+                  ? progress >= 100 ? "Preparing framed video..." : "Uploading..."
                   : !hasConsent
                     ? "Consent Required"
                     : "Upload Video"}

@@ -13,6 +13,18 @@ async function renderVideo(env, videoId) {
   return response.json();
 }
 
+async function recoverStaleRenders(env) {
+  if (!env.VIDEO_RENDER_QUEUE) throw new Error("VIDEO_RENDER_QUEUE binding is missing");
+  const response = await containerFor(env).fetch(new Request("http://container/_internal/render-pending", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-render-secret": env.JWT_SECRET },
+  }));
+  if (!response.ok) throw new Error(`Render recovery service returned HTTP ${response.status}`);
+  const { videoIds = [] } = await response.json();
+  for (const videoId of videoIds) await env.VIDEO_RENDER_QUEUE.send({ videoId });
+  if (videoIds.length) console.log(`Requeued ${videoIds.length} stale video render job(s)`);
+}
+
 async function enqueueResponseRender(request, env, response) {
   if (!response.ok || !env.VIDEO_RENDER_QUEUE) return response;
   const url = new URL(request.url);
@@ -52,5 +64,11 @@ export default {
         message.retry({ delaySeconds: 30 });
       }
     }
+  },
+
+  async scheduled(_controller, env, ctx) {
+    ctx.waitUntil(recoverStaleRenders(env).catch((error) => {
+      console.error("Could not recover stale video render jobs:", error.message);
+    }));
   },
 };
