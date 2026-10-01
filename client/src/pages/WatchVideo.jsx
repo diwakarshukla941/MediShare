@@ -19,6 +19,7 @@ export default function WatchVideo() {
   const [frame, setFrame] = useState(null);
   const [status, setStatus] = useState("loading");
   const [downloading, setDownloading] = useState(false);
+  const [renderError, setRenderError] = useState("");
   const videoRef = useRef(null);
   const maxWatchedRef = useRef(0);
   const lastSentRef = useRef(0);
@@ -41,6 +42,38 @@ export default function WatchVideo() {
       })
       .catch(() => setStatus("error"));
   }, [slug]);
+
+  useEffect(() => {
+    if (!video || video.renderingStatus !== "processing") return undefined;
+    let cancelled = false;
+    let timer;
+    const pollRenderStatus = async () => {
+      try {
+        const { data } = await api.get(`/videos/public/${slug}/status`);
+        if (cancelled) return;
+        if (data.renderingStatus === "completed") {
+          setVideo((current) => ({
+            ...current,
+            renderingStatus: "completed",
+            videoUrl: data.videoUrl || current.videoUrl,
+            thumbnailUrl: data.thumbnailUrl || current.thumbnailUrl,
+            frameBakedId: data.frameBakedId || current.frameBakedId,
+          }));
+          return;
+        }
+        if (data.renderingStatus === "failed") {
+          setRenderError(data.renderingError || "The framed video could not be prepared. Please contact the administrator.");
+          setVideo((current) => ({ ...current, renderingStatus: "failed" }));
+          return;
+        }
+      } catch {
+        // A brief API/network interruption should keep the pending state and retry.
+      }
+      if (!cancelled) timer = setTimeout(pollRenderStatus, 5000);
+    };
+    timer = setTimeout(pollRenderStatus, 2500);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [slug, video?.renderingStatus]);
 
   useEffect(() => {
     if (status !== "ready" || !video) return undefined;
@@ -103,7 +136,10 @@ export default function WatchVideo() {
     setDownloading(true);
     const toastId = toast.loading("Preparing your video with the frame — this can take a moment...");
     try {
-      await downloadFramedVideo(video._id, `${video.doctorName || "video"}.mp4`);
+      await downloadFramedVideo(video._id, {
+        slug,
+        onStatus: (message) => toast.loading(message, { id: toastId }),
+      });
       toast.success("Your video is ready", { id: toastId });
     } catch (err) {
       toast.error(await getDownloadErrorMessage(err), { id: toastId });
@@ -153,6 +189,17 @@ export default function WatchVideo() {
 
       <main className="mx-auto max-w-2xl px-4 py-10">
         <div className="relative">
+          {video.renderingStatus === "processing" && (
+            <div className="mb-4 flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="status" aria-live="polite">
+              <Loader2 size={18} className="shrink-0 animate-spin" />
+              <span>Your video is available to preview. We’re preparing the framed download; it will be ready here automatically.</span>
+            </div>
+          )}
+          {video.renderingStatus === "failed" && (
+            <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="status">
+              {renderError || "The framed version could not be prepared. Please contact the administrator."}
+            </div>
+          )}
           {/* Older baked videos may have blank variable fields. Overlay only
               those fields when this exact frame was baked into the file. */}
           {hasMatchingBakedFrame ? (
