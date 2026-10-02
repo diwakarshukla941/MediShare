@@ -163,8 +163,8 @@ export default function Analytics() {
             trend={loading ? undefined : k.trends.shares}
           />
           <KpiCard
-            label="Storage Used"
-            value={loading ? "—" : formatBytes(k?.storageUsed || 0)}
+            label="R2 Storage"
+            value={loading ? "—" : k?.storageUsage?.available ? formatBytes(k.storageUsage.bytes) : "Unavailable"}
             icon={HardDrive}
             iconClass="bg-amber-100 text-amber-700"
           />
