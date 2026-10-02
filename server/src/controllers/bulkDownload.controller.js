@@ -15,6 +15,11 @@ function safeSegment(value) {
   return String(value || "Unassigned").replace(/[\\/:*?"<>|\r\n]/g, "_").slice(0, 100);
 }
 
+function zoneMatch(zone) {
+  const escaped = String(zone || "").trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return { $regex: `^\\s*${escaped}\\s*$`, $options: "i" };
+}
+
 function jobResponse(job, downloadUrl = "") {
   return {
     job: {
@@ -69,9 +74,10 @@ async function appendVideo(archive, video) {
 }
 
 async function buildArchive(job) {
+  const zone = String(job.zone || "all").trim();
   const filter = job.videoIds?.length
     ? { _id: { $in: job.videoIds } }
-    : { ...(job.zone !== "all" ? { zone: job.zone } : {}), renderingStatus: "completed" };
+    : { ...(zone !== "all" ? { zone: zoneMatch(zone) } : {}), renderingStatus: "completed" };
   const archiveKey = await getArchiveObjectKey(`${job._id}-${crypto.randomUUID()}.zip`);
   const archive = archiver("zip", { zlib: { level: 0 } });
   let archiveFailure;
@@ -171,7 +177,7 @@ export async function resumeBulkDownloadJobs() {
 export const createBulkDownload = asyncHandler(async (req, res) => {
   const zone = String(req.body?.zone || "all").trim() || "all";
   const filter = { renderingStatus: "completed" };
-  if (zone !== "all") filter.zone = zone;
+  if (zone !== "all") filter.zone = zoneMatch(zone);
   const eligibleVideos = await Video.find(filter).select("_id").lean();
   const videoIds = eligibleVideos.map((video) => video._id);
   const totalVideos = videoIds.length;
