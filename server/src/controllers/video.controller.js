@@ -9,6 +9,7 @@ import { Zone } from "../models/Zone.js";
 import { AnalyticsEvent } from "../models/AnalyticsEvent.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { getR2StorageUsage } from "../utils/r2StorageUsage.js";
 import { uploadVideo, deleteStoredFile, getRenderableUrl, getVideoDownloadUrl, createDirectVideoUpload, verifyDirectVideoUpload, promoteDirectVideoUpload } from "../storage/provider.js";
 import { videoMetaSchema, videoUpdateSchema } from "../validators/video.validator.js";
 import { detectDevice } from "../utils/detectDevice.js";
@@ -733,25 +734,28 @@ export const getFramedDownload = asyncHandler(async (req, res) => {
 });
 
 export const getStats = asyncHandler(async (req, res) => {
-  const [agg] = await Video.aggregate([
-    {
-      $group: {
-        _id: null,
-        totalVideos: { $sum: 1 },
-        totalViews: { $sum: "$views" },
-        totalShares: { $sum: "$shareCount" },
-        storageUsed: { $sum: "$fileSize" },
+  const [aggResult, topVideos, storageUsage] = await Promise.all([
+    Video.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalVideos: { $sum: 1 },
+          totalViews: { $sum: "$views" },
+          totalShares: { $sum: "$shareCount" },
+        },
       },
-    },
+    ]),
+    Video.find().sort({ views: -1 }).limit(8).select("title doctorName credentials views shareCount slug"),
+    getR2StorageUsage(),
   ]);
-
-  const topVideos = await Video.find().sort({ views: -1 }).limit(8).select("title doctorName credentials views shareCount slug");
+  const agg = aggResult[0];
 
   res.json({
     totalVideos: agg?.totalVideos || 0,
     totalViews: agg?.totalViews || 0,
     totalShares: agg?.totalShares || 0,
-    storageUsed: agg?.storageUsed || 0,
+    storageUsed: storageUsage.available ? storageUsage.bytes : null,
+    storageUsage,
     topVideos,
   });
 });

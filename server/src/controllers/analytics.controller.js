@@ -1,6 +1,7 @@
 import { Video } from "../models/Video.js";
 import { AnalyticsEvent } from "../models/AnalyticsEvent.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { getR2StorageUsage } from "../utils/r2StorageUsage.js";
 
 const ALLOWED_RANGES = new Set([7, 30, 90]);
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -47,10 +48,11 @@ export const getAnalytics = asyncHandler(async (req, res) => {
     deviceAgg,
     countryAgg,
     topVideosBase,
+    storageUsage,
   ] = await Promise.all([
     Video.countDocuments(),
     Video.aggregate([
-      { $group: { _id: null, views: { $sum: "$views" }, shares: { $sum: "$shareCount" }, storage: { $sum: "$fileSize" } } },
+      { $group: { _id: null, views: { $sum: "$views" }, shares: { $sum: "$shareCount" } } },
     ]),
     AnalyticsEvent.countDocuments({ eventType: "view", ...matchCurrent }),
     AnalyticsEvent.countDocuments({ eventType: "view", ...matchPrevious }),
@@ -88,6 +90,7 @@ export const getAnalytics = asyncHandler(async (req, res) => {
       { $limit: 8 },
     ]),
     Video.find().sort({ views: -1 }).limit(8).select("doctorName empId zone phone views shareCount slug thumbnailUrl"),
+    getR2StorageUsage(),
   ]);
 
   const topVideoIds = topVideosBase.map((v) => v._id);
@@ -145,7 +148,7 @@ export const getAnalytics = asyncHandler(async (req, res) => {
 
   const topLocations = countryAgg.map((c) => ({ country: c._id || "Unknown", count: c.count }));
 
-  const totals = totalsAgg[0] || { views: 0, shares: 0, storage: 0 };
+  const totals = totalsAgg[0] || { views: 0, shares: 0 };
   const watch = watchAgg[0] || { avg: 0, total: 0 };
   const uniqueViewers = uniqueViewersAgg[0]?.count || 0;
 
@@ -155,7 +158,8 @@ export const getAnalytics = asyncHandler(async (req, res) => {
       totalVideos,
       totalViews: currentViewCount,
       totalShares: currentShareCount,
-      storageUsed: totals.storage,
+      storageUsed: storageUsage.available ? storageUsage.bytes : null,
+      storageUsage,
       uniqueViewers,
       avgWatchTime: Math.round(watch.avg || 0),
       totalWatchTime: Math.round(watch.total || 0),

@@ -177,9 +177,14 @@ export async function getStoredVideoStream(url, fileId, providerName) {
 export async function uploadArchiveStream(body, key, partSize) {
   const config = await getActiveStorageConfig();
   const { c, client } = r2(config);
+  // Archiver's output is async-iterable, but its stream implementation is not
+  // necessarily an instance of node:stream.Readable. The AWS multipart
+  // uploader only accepts native Readables (among other supported body
+  // types), so normalize the archive stream before passing it to Upload.
+  const uploadBody = body instanceof Readable ? body : Readable.from(body);
   const upload = new Upload({
     client,
-    params: { Bucket: c.bucket, Key: key, Body: body, ContentType: "application/zip" },
+    params: { Bucket: c.bucket, Key: key, Body: uploadBody, ContentType: "application/zip" },
     partSize,
     queueSize: 2,
     leavePartsOnError: false,

@@ -8,9 +8,6 @@ import { useAuth } from "../../context/AuthContext.jsx";
 import { hasPermission } from "../../lib/accessPermissions.js";
 import { api, formatBytes } from "../../lib/api.js";
 
-// ImageKit free-tier storage limit. Update if you're on a paid plan.
-const STORAGE_QUOTA_GB = 20;
-
 export default function Overview() {
   const { admin } = useAuth();
   const canViewVideos = hasPermission(admin, "videos:view");
@@ -40,8 +37,10 @@ export default function Overview() {
     load();
   }, [load]);
 
-  const storagePct = stats ? Math.min((stats.storageUsed / (STORAGE_QUOTA_GB * 1024 ** 3)) * 100, 100) : 0;
-  const storagePctLabel = storagePct > 0 && storagePct < 0.1 ? "<0.1" : storagePct.toFixed(storagePct < 10 ? 1 : 0);
+  const storageUsage = stats?.storageUsage;
+  const storageUpdatedAt = storageUsage?.updatedAt
+    ? new Date(storageUsage.updatedAt).toLocaleString()
+    : "";
 
   return (
     <div>
@@ -79,9 +78,11 @@ export default function Overview() {
                 iconClass="bg-purple-100 text-purple-700"
               />
               <StatCard
-                label="Storage Used"
-                value={initialLoading ? "—" : `${formatBytes(stats.storageUsed)} / ${STORAGE_QUOTA_GB} GB`}
-                sub={`${storagePctLabel}% used`}
+                label="R2 Storage Used"
+                value={initialLoading ? "—" : storageUsage?.available ? formatBytes(storageUsage.bytes) : "Unavailable"}
+                sub={storageUsage?.available
+                  ? `${storageUsage.objectCount.toLocaleString()} objects in ${storageUsage.bucketName}${storageUpdatedAt ? ` · updated ${storageUpdatedAt}` : ""}`
+                  : "Cloudflare storage metrics are not connected"}
                 icon={HardDrive}
                 iconClass="bg-amber-100 text-amber-700"
               />
