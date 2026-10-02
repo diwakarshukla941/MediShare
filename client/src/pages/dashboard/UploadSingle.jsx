@@ -76,16 +76,6 @@ export default function UploadSingle() {
               <input className="input" required placeholder="MBBS" value={form.credentials} onChange={update("credentials")} />
             </div>
             <div>
-              <label className="label">Employee ID</label>
-              <input
-                className="input"
-                required
-                placeholder="EMP-001"
-                value={form.empId}
-                onChange={update("empId")}
-              />
-            </div>
-            <div>
               <label className="label">Phone Number</label>
               <input
                 className="input"
@@ -96,6 +86,17 @@ export default function UploadSingle() {
                 onChange={update("phone")}
               />
             </div>
+            <div>
+              <label className="label">Employee ID</label>
+              <input
+                className="input"
+                required
+                placeholder="EMP-001"
+                value={form.empId}
+                onChange={update("empId")}
+              />
+            </div>
+
             <ZoneField value={form.zone} onChange={update("zone")} />
           </div>
 

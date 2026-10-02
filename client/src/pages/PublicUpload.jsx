@@ -306,19 +306,6 @@ export default function PublicUpload() {
                   />
                 </div>
 
-                <div>
-                  <label className="label">Employee ID</label>
-
-                  <input
-                    className="input"
-                    required
-                    disabled={!hasConsent}
-                    placeholder="e.g. EMP-001"
-                    value={form.empId}
-                    onChange={update("empId")}
-                  />
-                </div>
-
                 {/* Phone */}
 
                 <div>
@@ -336,6 +323,21 @@ export default function PublicUpload() {
                     onChange={update("phone")}
                   />
                 </div>
+
+                <div>
+                  <label className="label">Employee ID</label>
+
+                  <input
+                    className="input"
+                    required
+                    disabled={!hasConsent}
+                    placeholder="e.g. EMP-001"
+                    value={form.empId}
+                    onChange={update("empId")}
+                  />
+                </div>
+
+
 
                 <ZoneField value={form.zone} onChange={update("zone")} disabled={!hasConsent} />
 
