@@ -2,6 +2,7 @@
 
 A MERN app for doctors/clinics to upload patient-education videos and get a shareable public watch link — no login needed to upload or watch. A separate, authenticated admin dashboard manages everything (videos, analytics, settings), plus a **hidden Frame Studio** where a branded frame is designed and burned into every video via FFmpeg.
 
+
 ## Contents
 - [Full frontend/backend handoff documentation](docs/PROJECT_DOCUMENTATION.md)
 - [Stack](#stack)
